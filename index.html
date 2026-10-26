@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SkyFlip</title>
+<meta name="description" content="Live Hypixel SkyBlock auction house flip finder">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a trading desk. Status strip on top, filters, then one dense table of flips. */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --line:#dfe2ea; --ink:#151922; --muted:#5f6778;
+  --gold:#b87a0c; --gold-soft:#fbf1dc;
+  --ok:#11795a; --ok-soft:#ddf3eb; --info:#2457c5; --info-soft:#e3ebfb;
+  --warn:#a35a00; --bad:#b4232c; --bad-soft:#fbe4e5; --dim-soft:#eceef3;
+  --r-common:#555; --r-uncommon:#1f8a1f; --r-rare:#2b46c9; --r-epic:#7d1d9c; --r-legendary:#b46a00;
+  --r-mythic:#c2289e; --r-divine:#0f8c9e; --r-special:#c22b2b;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10131a; --surface:#171b24; --line:#262c39; --ink:#e7eaf1; --muted:#929bb0;
+  --gold:#f0b545; --gold-soft:#2c2414;
+  --ok:#3fcf9d; --ok-soft:#0f2a22; --info:#7ea2ff; --info-soft:#17223d;
+  --warn:#f0a040; --bad:#ff6b73; --bad-soft:#341619; --dim-soft:#1f2430;
+  --r-common:#d0d0d0; --r-uncommon:#55ff55; --r-rare:#7d86ff; --r-epic:#c95ce6; --r-legendary:#ffaa00;
+  --r-mythic:#ff66e0; --r-divine:#55ffff; --r-special:#ff5555;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#10131a; --surface:#171b24; --line:#262c39; --ink:#e7eaf1; --muted:#929bb0;
+  --gold:#f0b545; --gold-soft:#2c2414;
+  --ok:#3fcf9d; --ok-soft:#0f2a22; --info:#7ea2ff; --info-soft:#17223d;
+  --warn:#f0a040; --bad:#ff6b73; --bad-soft:#341619; --dim-soft:#1f2430;
+  --r-common:#d0d0d0; --r-uncommon:#55ff55; --r-rare:#7d86ff; --r-epic:#c95ce6; --r-legendary:#ffaa00;
+  --r-mythic:#ff66e0; --r-divine:#55ffff; --r-special:#ff5555;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--f-body)}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:grid;gap:16px}
+
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px 24px}
+h1{font:700 2.1rem/1 var(--f-display);letter-spacing:.01em;margin:0;display:flex;align-items:center;gap:10px}
+h1 .coin{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#ffe08a,var(--gold) 60%,#7a4f00);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--gold) 60%,transparent)}
+.sub{color:var(--muted);margin:4px 0 0;font-size:.92rem}
+
+.status{display:flex;flex-wrap:wrap;gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 10px;display:grid;gap:1px;min-width:0}
+.stat b{font:600 .95rem var(--f-num);font-variant-numeric:tabular-nums}
+.stat span{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--muted)}
+.dot.ok{background:var(--ok)} .dot.err{background:var(--bad)} .dot.live{background:var(--ok);animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot.live{animation:none}}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+.field{display:grid;gap:4px}
+.field label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+input[type=search],input[type=text]{font:inherit;font-size:.95rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:100%}
+#q{width:220px} #budget,#minp{width:120px;font-family:var(--f-num)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:600 .82rem var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:6px 12px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+.tablebox{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:860px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 .7rem var(--f-body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);position:sticky;top:0;background:var(--surface);cursor:pointer;user-select:none}
+th.num,td.num{text-align:right}
+th[aria-sort] ::after{content:""}
+th[aria-sort="descending"]::after{content:" ▾"} th[aria-sort="ascending"]::after{content:" ▴"}
+td.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-size:.88rem}
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover{background:color-mix(in srgb,var(--gold-soft) 60%,transparent)}
+.name{font-weight:600;white-space:normal;min-width:220px}
+.flags{display:inline-flex;gap:4px;margin-left:6px;vertical-align:1px}
+.flag{font:600 .65rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.profit{color:var(--gold);font-weight:600}
+.r-COMMON{color:var(--r-common)} .r-UNCOMMON{color:var(--r-uncommon)} .r-RARE{color:var(--r-rare)} .r-EPIC{color:var(--r-epic)}
+.r-LEGENDARY{color:var(--r-legendary)} .r-MYTHIC{color:var(--r-mythic)} .r-DIVINE{color:var(--r-divine)}
+.r-SPECIAL,.r-VERY_SPECIAL,.r-SUPREME,.r-ULTIMATE{color:var(--r-special)}
+
+.conf{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;border-radius:5px;padding:2px 7px}
+.conf.confirmed{background:var(--ok-soft);color:var(--ok)}
+.conf.likely{background:var(--info-soft);color:var(--info)}
+.conf.unverified{background:var(--dim-soft);color:var(--muted)}
+.conf.risky{background:var(--bad-soft);color:var(--bad)}
+.checks{display:inline-flex;gap:3px}
+.ck{font:600 .68rem var(--f-num);width:20px;height:20px;display:inline-grid;place-items:center;border-radius:4px;background:var(--dim-soft);color:var(--muted)}
+.ck.agree{background:var(--ok-soft);color:var(--ok)} .ck.bad{background:var(--bad-soft);color:var(--bad)} .ck.wait{opacity:.55}
+
+.copy{font:600 .78rem var(--f-num);border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:4px 8px;cursor:pointer}
+.copy:hover{border-color:var(--gold);color:var(--gold)}
+tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 24px}
+.dgrid div{display:grid;gap:2px;min-width:0}
+.dgrid span{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.dgrid b{font:600 .9rem var(--f-num);font-variant-numeric:tabular-nums}
+.dgrid b.txt{font:600 .9rem var(--f-body)}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--muted);font-size:.84rem}
+.legend b{color:var(--ink);font-weight:600}
+.banner{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;color:var(--muted)}
+.banner.err{border-color:var(--bad);color:var(--bad)}
+.toggle{display:flex;align-items:center;gap:8px;height:36px;font-size:.92rem;color:var(--ink);cursor:pointer}
+.toggle input{width:16px;height:16px;accent-color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1><span class="coin" aria-hidden="true"></span>SkyFlip</h1>
+      <p class="sub">Live Hypixel SkyBlock BIN flips, straight from Hypixel's auction API</p>
+    </div>
+    <div class="status" aria-live="polite">
+      <div class="stat"><span>Hypixel data</span><b id="s-age"><i class="dot"></i>connecting…</b></div>
+      <div class="stat"><span>BIN listings</span><b id="s-bins">–</b></div>
+      <div class="stat"><span>Refresh took</span><b id="s-ms">–</b></div>
+      <div class="stat"><span>Sales recorded</span><b id="s-sales">–</b></div>
+      <div class="stat"><span>Mayor</span><b id="s-mayor">–</b></div>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="controls">
+    <div class="field"><label for="q">Search item</label><input id="q" type="search" placeholder="e.g. Hyperion" autocomplete="off"></div>
+    <div class="field"><label for="budget">Max buy price</label><input id="budget" type="text" inputmode="decimal" placeholder="e.g. 20m"></div>
+    <div class="field"><label for="minp">Min profit</label><input id="minp" type="text" inputmode="decimal" value="100k"></div>
+    <div class="field"><label>Show</label>
+      <div class="chips" role="group" aria-label="Confidence filter">
+        <button class="chip" data-c="confirmed" aria-pressed="true">Confirmed</button>
+        <button class="chip" data-c="likely" aria-pressed="true">Likely</button>
+        <button class="chip" data-c="unverified" aria-pressed="true">Unverified</button>
+        <button class="chip" data-c="risky" aria-pressed="false">Risky</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th data-k="name">Item</th>
+        <th data-k="price" class="num">Buy</th>
+        <th data-k="sell" class="num">Sell at</th>
+        <th data-k="profit" class="num" aria-sort="descending">Profit after tax</th>
+        <th data-k="margin" class="num">Margin</th>
+        <th data-k="listed" class="num">Listed</th>
+        <th data-k="confRank">Checks</th>
+        <th>In game</th>
+      </tr></thead>
+      <tbody id="rows"><tr><td colspan="8" class="empty">Loading every auction from Hypixel. The first load takes 10–20 seconds; after that it updates every minute on its own.</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span><b>S</b> Recent real sales back up the sell price</span>
+    <span><b>D</b> Another seller lists within 10% of the sell price</span>
+    <span>Sales are recorded in this browser while the page is open, so the S check fills in over time.</span>
+    <span>Fees: 1–2.5% listing fee plus 1% claim tax above 1M (4x while Derpy is mayor, detected automatically).</span>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const fmt = n => n == null ? '–' : n >= 1e9 ? (n/1e9).toFixed(2)+'B' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : Math.round(n).toString();
+  const parseAmt = s => { const m = /^\s*([\d.]+)\s*([kmb]?)\s*$/i.exec(s||''); if (!m) return null; return +m[1] * ({k:1e3,m:1e6,b:1e9}[m[2].toLowerCase()]||1); };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const rank = {confirmed:0, likely:1, unverified:2, risky:3};
+
+  let st = null, sortKey = 'profit', sortDir = -1;
+  const open = new Set();
+  const show = new Set(['confirmed','likely','unverified']);
+
+  try {
+    const saved = JSON.parse(localStorage.getItem('skyflip') || '{}');
+    if (saved.minp != null) $('#minp').value = saved.minp;
+    if (saved.budget != null) $('#budget').value = saved.budget;
+    if (saved.show) { show.clear(); saved.show.forEach(c => show.add(c)); }
+  } catch {}
+  const persist = () => { try { localStorage.setItem('skyflip', JSON.stringify({minp:$('#minp').value, budget:$('#budget').value, show:[...show]})); } catch {} };
+  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', show.has(b.dataset.c)));
+
+  const label = {
+    sales: {agree:'Recent sales back up this price', disagree:'Recent sales are well below the next listing', thin:'Not enough sales recorded yet'},
+    depth: {agree:'Another seller lists close to this price', gap:'Only one listing near this price', thin:'No third seller listing this item'},
+  };
+  const cls = v => v === 'agree' ? 'agree' : (v === 'disagree' || v === 'gap') ? 'bad' : '';
+
+  function render() {
+    if (!st || !st.flips) return;
+    const q = $('#q').value.trim().toLowerCase();
+    const budget = parseAmt($('#budget').value);
+    const minp = parseAmt($('#minp').value) || 0;
+    let list = st.flips.filter(f => show.has(f.confidence) && f.profit >= minp && (!budget || f.price <= budget) && (!q || f.name.toLowerCase().includes(q)));
+    list.forEach(f => { f.confRank = rank[f.confidence]; f.sell = f.target * f.count; });
+    list.sort((a, b) => { const x = a[sortKey], y = b[sortKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir; });
+    list = list.slice(0, 300);
+    if (!list.length) { $('#rows').innerHTML = '<tr><td colspan="8" class="empty">No flips match these filters right now. Try a lower minimum profit or a higher budget.</td></tr>'; return; }
+    $('#rows').innerHTML = list.map(f => {
+      const c = f.checks;
+      const row = `<tr class="row" data-u="${f.uuid}">
+        <td class="name"><span class="r-${esc(f.tier)}">${esc(f.name)}</span>${f.count > 1 ? ` <span class="flag">x${f.count}</span>` : ''}<span class="flags">${f.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+        <td class="num">${fmt(f.price)}</td>
+        <td class="num">${fmt(f.sell)}</td>
+        <td class="num profit">+${fmt(f.profit)}</td>
+        <td class="num">${(f.margin*100).toFixed(1)}%</td>
+        <td class="num">${f.listed}</td>
+        <td><span class="conf ${f.confidence}">${f.confidence}</span>
+          <span class="checks"><span class="ck ${cls(c.sales)}" title="${label.sales[c.sales]}">S</span><span class="ck ${cls(c.depth)}" title="${label.depth[c.depth]}">D</span></span></td>
+        <td><button class="copy" data-cmd="/viewauction ${f.uuid}" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button></td>
+      </tr>`;
+      const det = open.has(f.uuid) ? `<tr class="detail"><td colspan="8"><div class="dgrid">
+        <div><span>Next cheapest BIN</span><b>${fmt(f.secondBin * f.count)}</b></div>
+        <div><span>Third cheapest BIN</span><b>${f.thirdBin ? fmt(f.thirdBin * f.count) : 'none'}</b></div>
+        <div><span>Sale median (3 days)</span><b>${f.histMedian ? fmt(f.histMedian * f.count) + ' · ' + f.histN + ' sales' : 'not enough sales yet'}</b></div>
+        <div><span>Listed</span><b>${new Date(f.start).toLocaleTimeString()} · ends ${new Date(f.end).toLocaleString()}</b></div>
+      </div></td></tr>` : '';
+      return row + det;
+    }).join('');
+  }
+
+  function status() {
+    if (!st) return;
+    const age = st.lastUpdated ? Math.round((Date.now() - st.lastUpdated) / 1000) : null;
+    const phase = {starting:'connecting…', fetching:'fetching…', decoding:'reading items…', updating:'updating…'}[st.status];
+    $('#s-age').innerHTML = `<i class="dot ${st.error ? 'err' : age != null && age < 150 ? 'live' : ''}"></i>${age == null ? (phase || 'waiting') : age + 's ago'}`;
+    $('#s-bins').textContent = st.bins ? st.bins.toLocaleString() : '–';
+    $('#s-ms').textContent = st.totalMs ? (st.totalMs/1000).toFixed(1) + 's' : '–';
+    $('#s-sales').textContent = st.historyItems != null ? st.historyItems.toLocaleString() + ' items' : '–';
+    $('#s-mayor').textContent = st.mayor ? st.mayor + (st.derpy ? ' · 4x tax' : '') : '–';
+    const b = $('#banner');
+    if (st.error) { b.hidden = false; b.className = 'banner err'; b.textContent = 'Could not reach Hypixel (' + st.error + '). Retrying every few seconds.'; }
+    else b.hidden = true;
+  }
+
+  SkyFlipEngine.on(s => { st = s; status(); render(); });
+  SkyFlipEngine.start();
+
+  document.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.k;
+    if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k === 'name' || k === 'confRank') ? 1 : -1; }
+    document.querySelectorAll('th').forEach(t => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', sortDir < 0 ? 'descending' : 'ascending');
+    render();
+  }));
+  document.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    const c = b.dataset.c; show.has(c) ? show.delete(c) : show.add(c);
+    b.setAttribute('aria-pressed', show.has(c)); persist(); render();
+  }));
+  ['#q','#budget','#minp'].forEach(s => $(s).addEventListener('input', () => { persist(); render(); }));
+  $('#rows').addEventListener('click', e => {
+    const btn = e.target.closest('.copy');
+    if (btn) {
+      e.stopPropagation();
+      navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy /viewauction', 1200); })
+        .catch(() => { btn.textContent = btn.dataset.cmd; });
+      return;
+    }
+    const tr = e.target.closest('tr.row'); if (!tr) return;
+    const u = tr.dataset.u; open.has(u) ? open.delete(u) : open.add(u); render();
+  });
+  setInterval(status, 1000);
+})();
+</script>
+</body>
+</html>
