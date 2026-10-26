@@ -107,6 +107,17 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .legend b{color:var(--ink);font-weight:600}
 .banner{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;color:var(--muted)}
 .banner.err{border-color:var(--bad);color:var(--bad)}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line)}
+.tab{font:700 1.15rem var(--f-display);letter-spacing:.02em;color:var(--muted);text-decoration:none;padding:8px 14px 10px;border-bottom:3px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+.tab:hover{color:var(--ink)}
+.tab[aria-current="page"]{color:var(--ink);border-bottom-color:var(--gold)}
+.tab .count{font:600 .75rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 8px}
+.tab[aria-current="page"] .count{background:var(--gold-soft);color:var(--gold)}
+.zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
+.below{color:var(--muted);font-size:.8rem;margin-left:6px}
+.ref{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;border-radius:5px;padding:2px 7px}
+.ref.solid{background:var(--ok-soft);color:var(--ok)} .ref.check{background:var(--dim-soft);color:var(--muted)}
+tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 .toggle{display:flex;align-items:center;gap:8px;height:36px;font-size:.92rem;color:var(--ink);cursor:pointer}
 .toggle input{width:16px;height:16px;accent-color:var(--gold)}
 </style>
@@ -127,8 +138,14 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
     </div>
   </header>
 
+  <nav class="tabs" aria-label="Views">
+    <a class="tab" href="#flips" data-view="flips">Flips <span class="count" id="c-flips">–</span></a>
+    <a class="tab" href="#snipes" data-view="snipes">Snipes <span class="count" id="c-snipes">–</span></a>
+  </nav>
+
   <div id="banner" class="banner" hidden></div>
 
+  <section id="v-flips" class="view">
   <div class="controls">
     <div class="field"><label for="q">Search item</label><input id="q" type="search" placeholder="e.g. Hyperion" autocomplete="off"></div>
     <div class="field"><label for="budget">Max buy price</label><input id="budget" type="text" inputmode="decimal" placeholder="e.g. 20m"></div>
@@ -165,6 +182,46 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
     <span>Sales are recorded in this browser while the page is open, so the S check fills in over time.</span>
     <span>Fees: 1–2.5% listing fee plus 1% claim tax above 1M (4x while Derpy is mayor, detected automatically).</span>
   </div>
+  </section>
+
+  <section id="v-snipes" class="view" hidden>
+  <div class="controls">
+    <div class="field"><label for="sq">Search item</label><input id="sq" type="search" placeholder="e.g. Hyperion" autocomplete="off"></div>
+    <div class="field"><label for="sbudget">Max buy price</label><input id="sbudget" type="text" inputmode="decimal" placeholder="e.g. 50m"></div>
+    <div class="field"><label>Show</label>
+      <div class="chips" role="group" aria-label="Snipe filters">
+        <button class="chip" id="f-zeros" aria-pressed="false">Missing zeros only</button>
+        <button class="chip" id="f-solid" aria-pressed="false">Solid market price only</button>
+      </div>
+    </div>
+    <div class="field"><label for="beep">Alert</label>
+      <label class="toggle"><input id="beep" type="checkbox"> Beep on new snipes</label>
+    </div>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th data-s="name">Item</th>
+        <th data-s="price" class="num">Price</th>
+        <th data-s="marketTotal" class="num">Market</th>
+        <th data-s="profit" class="num" aria-sort="descending">Profit after tax</th>
+        <th data-s="ratio">How cheap</th>
+        <th data-s="start" class="num">Listed</th>
+        <th data-s="refRank">Market price</th>
+        <th>In game</th>
+      </tr></thead>
+      <tbody id="srows"><tr><td colspan="8" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="legend">
+    <span>A snipe is a BIN listed at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
+    <span><b>Market</b> is the middle of the three cheapest listings from other sellers, capped by recent sales.</span>
+    <span><b>Solid</b> means recent sales or three close listings back that price up. <b>Check</b> means it rests on one or two listings, so look in game first.</span>
+    <span>Snipes go fast and Hypixel's data is up to a minute old, so some will already be sold. New BINs can't be bought for their first 20 seconds.</span>
+  </div>
+  </section>
 </div>
 
 <script src="engine.js"></script>
@@ -187,7 +244,7 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
     if (saved.show) { show.clear(); saved.show.forEach(c => show.add(c)); }
   } catch {}
   const persist = () => { try { localStorage.setItem('skyflip', JSON.stringify({minp:$('#minp').value, budget:$('#budget').value, show:[...show]})); } catch {} };
-  document.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', show.has(b.dataset.c)));
+  document.querySelectorAll('.chip[data-c]').forEach(b => b.setAttribute('aria-pressed', show.has(b.dataset.c)));
 
   const label = {
     sales: {agree:'Recent sales back up this price', disagree:'Recent sales are well below the next listing', thin:'Not enough sales recorded yet'},
@@ -248,11 +305,11 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
   document.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.k;
     if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k === 'name' || k === 'confRank') ? 1 : -1; }
-    document.querySelectorAll('th').forEach(t => t.removeAttribute('aria-sort'));
+    document.querySelectorAll('th[data-k]').forEach(t => t.removeAttribute('aria-sort'));
     th.setAttribute('aria-sort', sortDir < 0 ? 'descending' : 'ascending');
     render();
   }));
-  document.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.chip[data-c]').forEach(b => b.addEventListener('click', () => {
     const c = b.dataset.c; show.has(c) ? show.delete(c) : show.add(c);
     b.setAttribute('aria-pressed', show.has(c)); persist(); render();
   }));
@@ -269,6 +326,92 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
     const u = tr.dataset.u; open.has(u) ? open.delete(u) : open.add(u); render();
   });
   setInterval(status, 1000);
+
+  // ---------- views ----------
+  function showView() {
+    const v = location.hash === '#snipes' ? 'snipes' : 'flips';
+    $('#v-flips').hidden = v !== 'flips';
+    $('#v-snipes').hidden = v !== 'snipes';
+    document.querySelectorAll('.tab').forEach(t => { if (t.dataset.view === v) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
+  }
+  window.addEventListener('hashchange', showView);
+  showView();
+
+  // ---------- snipes ----------
+  let sKey = 'profit', sDir = -1, prevSnipes = null;
+  const fresh = new Map(); // uuid -> time first seen as a snipe
+  const sf = { zeros: false, solid: false };
+  try {
+    const s = JSON.parse(localStorage.getItem('skyflip-snipes') || '{}');
+    if (s.sbudget != null) $('#sbudget').value = s.sbudget;
+    sf.zeros = !!s.zeros; sf.solid = !!s.solid; $('#beep').checked = !!s.beep;
+  } catch {}
+  $('#f-zeros').setAttribute('aria-pressed', sf.zeros); $('#f-solid').setAttribute('aria-pressed', sf.solid);
+  const persistS = () => { try { localStorage.setItem('skyflip-snipes', JSON.stringify({ sbudget: $('#sbudget').value, zeros: sf.zeros, solid: sf.solid, beep: $('#beep').checked })); } catch {} };
+
+  let audio;
+  function beep() {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'square'; o.frequency.value = 880; g.gain.value = 0.06;
+      o.connect(g); g.connect(audio.destination); o.start();
+      o.frequency.setValueAtTime(1320, audio.currentTime + 0.08);
+      o.stop(audio.currentTime + 0.18);
+    } catch {}
+  }
+  const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s / 60) + 'm ago' : Math.floor(s / 3600) + 'h ago'; };
+
+  function trackSnipes() {
+    const now = Date.now(), ids = new Set(st.snipes.map(s => s.uuid));
+    let newOnes = 0;
+    for (const s of st.snipes) if (!fresh.has(s.uuid)) { fresh.set(s.uuid, now); if (prevSnipes) newOnes++; }
+    for (const k of fresh.keys()) if (!ids.has(k)) fresh.delete(k);
+    prevSnipes = ids;
+    if (newOnes && $('#beep').checked && passes(st.snipes.find(s => fresh.get(s.uuid) === now))) beep();
+  }
+  function passes(s) {
+    if (!s) return false;
+    const q = $('#sq').value.trim().toLowerCase(), budget = parseAmt($('#sbudget').value);
+    return (!sf.zeros || s.missingZeros) && (!sf.solid || s.reference === 'solid') && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q));
+  }
+  function renderSnipes() {
+    if (!st || !st.snipes) return;
+    $('#c-snipes').textContent = st.snipes.length;
+    let list = st.snipes.filter(passes);
+    list.forEach(s => { s.marketTotal = s.market * s.count; s.refRank = s.reference === 'solid' ? 0 : 1; });
+    list.sort((a, b) => { const x = a[sKey], y = b[sKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sDir; });
+    if (!list.length) { $('#srows').innerHTML = '<tr><td colspan="8" class="empty">No snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.</td></tr>'; return; }
+    const now = Date.now();
+    $('#srows').innerHTML = list.map(s => `<tr class="${now - (fresh.get(s.uuid) || 0) < 70e3 && prevSnipes ? 'fresh' : ''}">
+      <td class="name"><span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+      <td class="num">${fmt(s.price)}</td>
+      <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sale median ' + fmt(s.histMedian * s.count) : ''}">${fmt(s.marketTotal)}</td>
+      <td class="num profit">+${fmt(s.profit)}</td>
+      <td>${s.missingZeros ? `<span class="zero">Missing ${s.missingZeros} zero${s.missingZeros > 1 ? 's' : ''}</span>` : ''}<span class="below">${Math.round((1 - 1 / s.ratio) * 100)}% below</span></td>
+      <td class="num" data-age="${s.start}">${ago(s.start)}</td>
+      <td><span class="ref ${s.reference}" title="${s.reference === 'solid' ? 'Recent sales or three close listings back up the market price' : 'Market price rests on one or two listings; check in game'}">${s.reference}</span></td>
+      <td><button class="copy" data-cmd="/viewauction ${s.uuid}" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button></td>
+    </tr>`).join('');
+  }
+  SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } if (s.flips) $('#c-flips').textContent = s.flips.length; });
+  document.querySelectorAll('th[data-s]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.s;
+    if (sKey === k) sDir *= -1; else { sKey = k; sDir = (k === 'name' || k === 'refRank') ? 1 : -1; }
+    document.querySelectorAll('th[data-s]').forEach(t => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', sDir < 0 ? 'descending' : 'ascending');
+    renderSnipes();
+  }));
+  $('#f-zeros').addEventListener('click', e => { sf.zeros = !sf.zeros; e.currentTarget.setAttribute('aria-pressed', sf.zeros); persistS(); renderSnipes(); });
+  $('#f-solid').addEventListener('click', e => { sf.solid = !sf.solid; e.currentTarget.setAttribute('aria-pressed', sf.solid); persistS(); renderSnipes(); });
+  ['#sq', '#sbudget'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
+  $('#beep').addEventListener('change', () => { persistS(); if ($('#beep').checked) beep(); });
+  $('#srows').addEventListener('click', e => {
+    const btn = e.target.closest('.copy'); if (!btn) return;
+    navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy /viewauction', 1200); })
+      .catch(() => { btn.textContent = btn.dataset.cmd; });
+  });
+  setInterval(() => document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age)), 1000);
 })();
 </script>
 </body>

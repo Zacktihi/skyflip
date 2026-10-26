@@ -117,7 +117,7 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
       const l = { uuid: a.uuid, name: a.item_name, tier: a.tier, price: a.starting_bid, unit: a.starting_bid / d.count, count: d.count, start: a.start, end: a.end, seller: a.auctioneer, flags: d.flags, key: d.key };
       const g = groups.get(d.key); g ? g.push(l) : groups.set(d.key, [l]);
     }
-    const now = Date.now(), out = [];
+    const now = Date.now(), out = [], snipes = [];
     for (const [key, list] of groups) {
       if (list.length < 2) continue;
       list.sort((x, y) => x.unit - y.unit);
@@ -128,6 +128,9 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
       const third = others.find(l => l.seller !== next.seller);
       const hist = (history.get(key) || []).filter(s => now - s[0] < 3 * 864e5);
       const histMedian = hist.length >= 5 ? trimmedMedian(hist.map(s => s[1])) : null;
+
+      const snipe = findSnipe(low, others, histMedian, hist.length, derpy);
+      if (snipe) snipes.push(snipe);
 
       const target = histMedian != null ? Math.min(next.unit, histMedian) : next.unit;
       const profit = Math.round(net(target * low.count, derpy) - low.price);
@@ -146,7 +149,43 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
         histMedian, histN: hist.length, listed: list.length, checks: { sales, depth }, confidence });
     }
     out.sort((a, b) => b.profit - a.profit);
-    return { flips: out.slice(0, 800), bins };
+    snipes.sort((a, b) => b.profit - a.profit);
+    return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), bins };
+  }
+
+  // ---------- snipes: listings priced far below the item's going rate ----------
+  // Market price = median of the three cheapest listings from other sellers
+  // (one overpriced listing can't inflate it), capped by recent real sales.
+  // A listing qualifies when it costs a third of that or less. When the gap is
+  // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
+  const SNIPE_RATIO = 3;
+  function findSnipe(low, others, histMedian, histN, derpy) {
+    const sellers = new Set(), refs = [];
+    for (const l of others) {
+      if (sellers.has(l.seller)) continue;
+      sellers.add(l.seller); refs.push(l.unit);
+      if (refs.length === 3) break;
+    }
+    const listMedian = refs.length === 3 ? refs[1] : refs.length === 2 ? (refs[0] + refs[1]) / 2 : refs[0];
+    const market = histMedian != null ? Math.min(listMedian, histMedian) : listMedian;
+    const ratio = market / low.unit;
+    if (ratio < SNIPE_RATIO) return null;
+    const profit = Math.round(net(market * low.count, derpy) - low.price);
+    if (profit < 100_000) return null;
+
+    // How many zeros does the gap look like? Allow ±40% around each power of ten.
+    const zeros = Math.round(Math.log10(ratio));
+    const missingZeros = zeros >= 1 && ratio / 10 ** zeros >= 0.6 && ratio / 10 ** zeros <= 1.4 ? zeros : 0;
+
+    // How trustworthy is the market price?
+    // solid — real sales agree with the listings, or three sellers list within 15% of each other
+    // check — based on only one or two listings that disagree
+    const salesAgree = histMedian != null && Math.abs(histMedian - listMedian) / listMedian <= 0.25;
+    const tight = refs.length === 3 && (refs[2] - refs[0]) / refs[0] <= 0.15;
+    const reference = salesAgree || tight ? 'solid' : 'check';
+
+    return { ...low, market, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
+      profit, margin: profit / low.price, listed: others.length + 1 };
   }
 
   // ---------- update loop ----------
@@ -196,7 +235,7 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
     const res = computeFlips(raw, isDerpy());
     Object.assign(state, {
       status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins,
-      fetchMs, totalMs: performance.now() - t0, flips: res.flips,
+      fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
     });
     emit();
