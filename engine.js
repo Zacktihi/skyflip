@@ -178,11 +178,13 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
     const missingZeros = zeros >= 1 && ratio / 10 ** zeros >= 0.6 && ratio / 10 ** zeros <= 1.4 ? zeros : 0;
 
     // How trustworthy is the market price?
-    // solid — real sales agree with the listings, or three sellers list within 15% of each other
-    // check — based on only one or two listings that disagree
+    // solid  — real sales agree with the listings, or three sellers list within 15% of each other
+    // likely — two other sellers list within 30% of each other
+    // check  — rests on a single listing, or the listings disagree
     const salesAgree = histMedian != null && Math.abs(histMedian - listMedian) / listMedian <= 0.25;
     const tight = refs.length === 3 && (refs[2] - refs[0]) / refs[0] <= 0.15;
-    const reference = salesAgree || tight ? 'solid' : 'check';
+    const pair = refs.length >= 2 && (refs[1] - refs[0]) / refs[0] <= 0.30;
+    const reference = salesAgree || tight ? 'solid' : pair ? 'likely' : 'check';
 
     return { ...low, market, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
       profit, margin: profit / low.price, listed: others.length + 1 };
