@@ -149,6 +149,8 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .tab .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 7px}
 .tab[aria-current="page"] .count{background:var(--gold-soft);color:var(--gold)}
 .icon{width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:-7px;margin-right:9px;flex:none}
+.tag-auction{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,var(--line))}
+.ends{color:var(--warn)}
 .pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
@@ -238,6 +240,8 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <button class="chip" data-r="likely" aria-pressed="true">Likely</button>
         <button class="chip" data-r="check" aria-pressed="false">Check</button>
         <button class="chip" id="f-zeros" aria-pressed="false">Missing zeros only</button>
+        <button class="chip" data-t="bin" aria-pressed="true" title="Buy It Now listings priced far below market">BIN</button>
+        <button class="chip" data-t="auction" aria-pressed="true" title="Bid auctions ending within 15 minutes with a low next bid">Ending auctions</button>
       </div>
     </div>
     <div class="field"><label for="smin">Min sales per day</label><input id="smin" type="text" inputmode="decimal" value="10" style="width:110px;font-family:var(--f-num)"></div>
@@ -267,7 +271,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
-    <span>A snipe is a BIN listed at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
+    <span><b>Two kinds of snipe.</b> <b>BIN</b>: a Buy It Now listing at a third of the market price or less. <b>Ending auctions</b> (tagged <i>auction</i>): a bid auction ending within 15 minutes whose next bid (about 15% above the current one) is two-thirds of the market price or less. Other players can still outbid you, and Hypixel's data is up to a minute old, so check the current bid in game.</span>
+    <span>The scan reads auction pages from both ends inward and shows snipes from the first pages as soon as they arrive. A page that takes more than 5 seconds is skipped for that update so the rest isn't held up.</span>
+    <span>A BIN snipe is a listing at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
     <span><b>Market</b> is the lowest of: the middle of the three cheapest listings from other sellers, sales recorded in this browser, and the <b>3-day price</b> (the median sale over the last 3 days for the same rarity, stars or pet level, from Coflnet). A snipe has to be a third of that or less.</span>
     <span><b>Solid</b>: recent sales or three close listings back the market price. <b>Likely</b>: two other sellers list within 30% of each other. <b>Check</b>: one listing or listings that disagree (hidden by default). Always look at the item in game before buying.</span>
     <span><b>Sold/day</b> is the item's average sales per day, from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. Items that sell less often than your minimum are hidden, since a cheap item nobody buys is hard to resell.</span>
@@ -324,7 +330,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=12"></script>
+<script src="engine.js?v=13"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -466,16 +472,16 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   // ---------- snipes ----------
   let sKey = 'profit', sDir = -1, prevSnipes = null;
   const fresh = new Map(); // uuid -> time first seen as a snipe
-  const sf = { zeros: false, refs: new Set(['solid', 'likely']) };
+  const sf = { zeros: false, refs: new Set(['solid', 'likely']), types: new Set(['bin', 'auction']) };
   try {
     const s = JSON.parse(localStorage.getItem('skyflip-snipes') || '{}');
     if (s.sbudget != null) $('#sbudget').value = s.sbudget;
     if (s.smin != null) $('#smin').value = s.smin;
-    sf.zeros = !!s.zeros; if (s.refs) sf.refs = new Set(s.refs); $('#beep').checked = !!s.beep;
+    sf.zeros = !!s.zeros; if (s.refs) sf.refs = new Set(s.refs); if (s.types) sf.types = new Set(s.types); $('#beep').checked = !!s.beep;
   } catch {}
   $('#f-zeros').setAttribute('aria-pressed', sf.zeros);
   document.querySelectorAll('.chip[data-r]').forEach(b => b.setAttribute('aria-pressed', sf.refs.has(b.dataset.r)));
-  const persistS = () => { try { localStorage.setItem('skyflip-snipes', JSON.stringify({ sbudget: $('#sbudget').value, smin: $('#smin').value, zeros: sf.zeros, refs: [...sf.refs], beep: $('#beep').checked })); } catch {} };
+  const persistS = () => { try { localStorage.setItem('skyflip-snipes', JSON.stringify({ sbudget: $('#sbudget').value, smin: $('#smin').value, zeros: sf.zeros, refs: [...sf.refs], types: [...sf.types], beep: $('#beep').checked })); } catch {} };
 
   let audio;
   function beep() {
@@ -488,6 +494,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       o.stop(audio.currentTime + 0.18);
     } catch {}
   }
+  const endsIn = t => { const s = Math.round((t - Date.now()) / 1000); return s <= 0 ? 'ended' : 'ends ' + (s >= 60 ? Math.floor(s / 60) + 'm ' : '') + (s % 60) + 's'; };
   const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s / 60) + 'm ago' : Math.floor(s / 3600) + 'h ago'; };
 
   function trackSnipes() {
@@ -500,6 +507,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }
   function passes(s) {
     if (!s) return false;
+    if (!sf.types.has(s.type || 'bin')) return false;
     const q = $('#sq').value.trim().toLowerCase(), budget = parseAmt($('#sbudget').value);
     if (!((!sf.zeros || s.missingZeros) && sf.refs.has(s.reference) && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q)))) return false;
     // Snipes show the moment they're found, marked "checking", and drop off if the
@@ -521,14 +529,14 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     if (!list.length) { $('#srows').innerHTML = `<tr><td colspan="10" class="empty">${pending ? `Checking how fast ${pending} candidate item${pending > 1 ? 's' : ''} sell…` : 'No fast-selling snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.'}</td></tr>`; return; }
     const now = Date.now();
     $('#srows').innerHTML = list.map(s => `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
-      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
-      <td class="num">${fmt(s.price)}</td>
+      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.type === 'auction' ? ' <span class="flag tag-auction">auction</span>' : ''}${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+      <td class="num"${s.type === 'auction' ? ` title="Next bid: about 15% above the current bid${s.bids ? ' (' + s.bids + ' bids so far)' : ' (no bids yet, so the starting bid)'}"` : ''}>${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
       <td class="num">${s.volume === undefined ? '<span class="pending">checking…</span>' : s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
       <td class="num profit">+${fmt(s.profit)}</td>
       <td>${s.missingZeros ? `<span class="zero">Missing ${s.missingZeros} zero${s.missingZeros > 1 ? 's' : ''}</span>` : ''}<span class="below">${Math.round((1 - 1 / s.ratio) * 100)}% below</span></td>
       <td class="num">${fmtVol(s.volume)}</td>
-      <td class="num" data-age="${s.start}">${ago(s.start)}</td>
+      ${s.type === 'auction' ? `<td class="num ends" data-end="${s.end}">${endsIn(s.end)}</td>` : `<td class="num" data-age="${s.start}">${ago(s.start)}</td>`}
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
       <td>${copyButtons(s.uuid, s.name, s.key)}</td>
     </tr>`).join('');
@@ -541,6 +549,10 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     th.setAttribute('aria-sort', sDir < 0 ? 'descending' : 'ascending');
     renderSnipes();
   }));
+  document.querySelectorAll('.chip[data-t]').forEach(b => {
+    b.setAttribute('aria-pressed', sf.types.has(b.dataset.t));
+    b.addEventListener('click', () => { const t = b.dataset.t; sf.types.has(t) ? sf.types.delete(t) : sf.types.add(t); b.setAttribute('aria-pressed', sf.types.has(t)); persistS(); renderSnipes(); });
+  });
   $('#f-zeros').addEventListener('click', e => { sf.zeros = !sf.zeros; e.currentTarget.setAttribute('aria-pressed', sf.zeros); persistS(); renderSnipes(); });
   document.querySelectorAll('.chip[data-r]').forEach(b => b.addEventListener('click', () => {
     const r = b.dataset.r; sf.refs.has(r) ? sf.refs.delete(r) : sf.refs.add(r);
@@ -551,7 +563,10 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   $('#srows').addEventListener('click', e => {
     const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
   });
-  setInterval(() => document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age)), 1000);
+  setInterval(() => {
+    document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age));
+    document.querySelectorAll('[data-end]').forEach(td => td.textContent = endsIn(+td.dataset.end));
+  }, 1000);
 
   // ---------- bazaar ----------
   let bKey = 'potential', bDir = -1, bState = null;

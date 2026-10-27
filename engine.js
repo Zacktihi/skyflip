@@ -105,10 +105,14 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
 
   // ---------- live listings ----------
   const described = new Map(); // auction uuid -> description (decoded once, reused every minute)
-  async function getJSON(url) {
-    const r = await fetch(url, { cache: 'no-store' });
-    if (!r.ok) throw new Error('Hypixel returned HTTP ' + r.status);
-    return r.json();
+  async function getJSON(url, timeoutMs) {
+    const ctrl = timeoutMs ? new AbortController() : null;
+    const t = ctrl && setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+      if (!r.ok) throw new Error('Hypixel returned HTTP ' + r.status);
+      return await r.json();
+    } finally { if (t) clearTimeout(t); }
   }
 
   function computeFlips(auctions, derpy) {
@@ -153,6 +157,24 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       out.push({ ...low, target, profit, margin: profit / low.price, secondBin: next.unit, thirdBin: third ? third.unit : null,
         histMedian, histN: hist.length, listed: list.length, checks: { sales, depth }, confidence });
     }
+    // Regular (bid) auctions ending soon whose next bid is well below what the
+    // same item sells for as a BIN. Priced against the same market as BIN snipes.
+    for (const a of auctions) {
+      if (a.bin || a.claimed) continue;
+      const left = a.end - now;
+      if (left <= 0 || left > ENDING_WINDOW) continue;
+      const d = described.get(a.uuid);
+      if (!d || !d.key) continue;
+      const list = groups.get(d.key);
+      if (!list || list.length < 2) continue; // need BIN listings to price it
+      const hist = (history.get(d.key) || []).filter(s => now - s[0] < 3 * 864e5);
+      const histMedian = hist.length >= 5 ? trimmedMedian(hist.map(s => s[1])) : null;
+      const bid = a.highest_bid_amount > 0 ? Math.ceil(a.highest_bid_amount * BID_STEP) : a.starting_bid;
+      const l = { uuid: a.uuid, name: a.item_name, tier: a.tier, price: bid, unit: bid / d.count, count: d.count, start: a.start, end: a.end, seller: a.auctioneer, flags: d.flags, key: d.key };
+      const snipe = findSnipe(l, list.filter(x => x.seller !== a.auctioneer), histMedian, hist.length, derpy, { type: 'auction', minRatio: ENDING_RATIO, bids: (a.bids || []).length });
+      if (snipe) snipes.push(snipe);
+    }
+
     out.sort((a, b) => b.profit - a.profit);
     snipes.sort((a, b) => b.profit - a.profit);
     return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), bins };
@@ -164,6 +186,10 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // A listing qualifies when it costs a third of that or less. When the gap is
   // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
   const SNIPE_RATIO = 3;
+  // Bid auctions: look at ones ending within 15 minutes. The next bid has to beat
+  // the current one by about 15%, and a snipe needs the item to be worth at
+  // least 1.5x that bid (a bid auction rarely ends at a third of the price).
+  const ENDING_WINDOW = 15 * 60e3, BID_STEP = 1.15, ENDING_RATIO = 1.5;
   // How many zeros does the gap look like? Allow ±40% around each power of ten.
   function zerosFor(ratio) {
     const z = Math.round(Math.log10(ratio));
@@ -177,13 +203,14 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     s.ratio = s.market / s.unit;
     s.profit = Math.round(net(s.market * s.count, isDerpy()) - s.price);
     s.margin = s.profit / s.price;
-    s.missingZeros = zerosFor(s.ratio);
-    s.below3d = !!s.avg3d && (s.ratio < SNIPE_RATIO || s.profit < 100_000);
+    s.missingZeros = s.type === 'auction' ? 0 : zerosFor(s.ratio);
+    s.below3d = !!s.avg3d && (s.ratio < (s.minRatio || SNIPE_RATIO) || s.profit < 100_000);
     s.reference = s.avg3d && Math.abs(s.avg3d - s.listMedian) / s.listMedian <= 0.25 ? 'solid' : s.baseReference;
   }
   const SNIPE_MAX_AGE = 30 * 60e3; // a real typo gets bought within minutes; older ones usually aren't cheap
-  function findSnipe(low, others, histMedian, histN, derpy) {
-    if (Date.now() - low.start > SNIPE_MAX_AGE) return null;
+  function findSnipe(low, others, histMedian, histN, derpy, opts = {}) {
+    const type = opts.type || 'bin', minRatio = opts.minRatio || SNIPE_RATIO;
+    if (type === 'bin' && Date.now() - low.start > SNIPE_MAX_AGE) return null;
     const sellers = new Set(), refs = [];
     for (const l of others) {
       if (sellers.has(l.seller)) continue;
@@ -193,11 +220,11 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const listMedian = refs.length === 3 ? refs[1] : refs.length === 2 ? (refs[0] + refs[1]) / 2 : refs[0];
     const market = histMedian != null ? Math.min(listMedian, histMedian) : listMedian;
     const ratio = market / low.unit;
-    if (ratio < SNIPE_RATIO) return null;
+    if (ratio < minRatio) return null;
     const profit = Math.round(net(market * low.count, derpy) - low.price);
     if (profit < 100_000) return null;
 
-    const missingZeros = zerosFor(ratio);
+    const missingZeros = type === 'bin' ? zerosFor(ratio) : 0;
 
     // How trustworthy is the market price?
     // solid  — real sales agree with the listings, or three sellers list within 15% of each other
@@ -208,7 +235,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const pair = refs.length >= 2 && (refs[1] - refs[0]) / refs[0] <= 0.30;
     const reference = salesAgree || tight ? 'solid' : pair ? 'likely' : 'check';
 
-    return { ...low, market, baseMarket: market, baseReference: reference, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
+    return { ...low, type, minRatio, bids: opts.bids || 0, market, baseMarket: market, baseReference: reference, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
       profit, margin: profit / low.price, listed: others.length + 1 };
   }
 
@@ -227,6 +254,22 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   const isDerpy = () => mayor === 'Derpy';
   const listeners = [];
   const state = { status: 'starting', error: null };
+
+  // Snipes from the first pages to arrive, shown before the full scan finishes.
+  async function earlySnipes(firstPages, t0) {
+    const fresh = [];
+    for (const p of firstPages) for (const a of p.auctions) if (!described.has(a.uuid)) fresh.push(a);
+    const nowMs = Date.now();
+    const todo = fresh.filter(a => a.bin || (a.end - nowMs > 0 && a.end - nowMs <= ENDING_WINDOW)).map(a => [a.uuid, a.item_bytes, a.item_name]);
+    for (const [id, d] of await decode(todo)) described.set(id, d);
+    const ids = new Set(fresh.map(a => a.uuid));
+    const quick = computeFlips(fresh.concat(raw.filter(a => !ids.has(a.uuid))), isDerpy());
+    state.snipes = quick.snipes;
+    state.earlyMs = performance.now() - t0;
+    annotateVolumes();
+    emit();
+    wantVolumes(quick.snipes);
+  }
 
   async function cycle() {
     // Wait for Hypixel's next rebuild. The ended-auctions feed is tiny and is
@@ -247,13 +290,28 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const t0 = performance.now();
     if (!raw.length) { state.status = 'fetching'; emit(); }
 
-    // Fetch every page at once. totalPages comes from the last cycle; any page
-    // reporting more pages than expected triggers a follow-up for the extras.
-    const getPage = p => getJSON(`${API}/auctions?page=${p}`).catch(() => null);
-    let pages = await Promise.all(Array.from({ length: totalPages }, (_, p) => getPage(p)));
+    // Fetch every page at once, requested from both ends inward (0, last, 1,
+    // last-1, ...). Each page gets 5 seconds; a page that hasn't arrived by then
+    // is skipped for this update rather than holding everything up.
+    const PAGE_TIMEOUT = 5000;
+    const getPage = p => getJSON(`${API}/auctions?page=${p}`, PAGE_TIMEOUT).catch(() => null);
+    const order = [];
+    for (let lo = 0, hi = totalPages - 1; lo <= hi; lo++, hi--) { order.push(lo); if (hi !== lo) order.push(hi); }
+    const got = new Array(totalPages).fill(undefined);
+    let early = null;
+    const reqs = order.map(p => getPage(p).then(pg => {
+      got[p] = pg;
+      // Early pass: once the first two pages from each end are in, show
+      // snipes from them straight away (merged with last update's listings).
+      if (!early && raw.length && order.slice(0, 4).every(i => got[i] !== undefined)) early = earlySnipes(order.slice(0, 4).map(i => got[i]).filter(Boolean), t0);
+      return pg;
+    }));
+    let pages = await Promise.all(reqs);
+    if (early) await early;
     const reported = Math.max(0, ...pages.filter(Boolean).map(p => p.totalPages || 0));
     if (reported > totalPages) pages = pages.concat(await Promise.all(Array.from({ length: reported - totalPages }, (_, i) => getPage(totalPages + i))));
     if (reported) totalPages = reported;
+    const skippedPages = pages.filter(p => !p || !p.auctions).length;
     pages = pages.filter(p => p && p.auctions);
     if (!pages.length) throw new Error('Hypixel returned no auction pages');
 
@@ -269,7 +327,9 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
 
     // Decode only listings we haven't seen before; forget ones that are gone.
     for (const k of described.keys()) if (!seen.has(k)) described.delete(k);
-    const todo = auctions.filter(a => a.bin && !described.has(a.uuid)).map(a => [a.uuid, a.item_bytes, a.item_name]);
+    const nowMs = Date.now();
+    const wanted = a => a.bin || (a.end - nowMs > 0 && a.end - nowMs <= ENDING_WINDOW);
+    const todo = auctions.filter(a => wanted(a) && !described.has(a.uuid)).map(a => [a.uuid, a.item_bytes, a.item_name]);
     state.status = described.size ? 'updating' : 'decoding'; emit();
     for (let i = 0; i < todo.length; i += 4000) {
       for (const [id, d] of await decode(todo.slice(i, i + 4000))) described.set(id, d);
@@ -280,7 +340,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     raw = auctions;
     const res = computeFlips(raw, isDerpy());
     Object.assign(state, {
-      status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins, stalePages,
+      status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins, stalePages, skippedPages,
       fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
     });
