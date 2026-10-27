@@ -1,4 +1,4 @@
-// SkyFlip engine — runs entirely in the visitor's browser on Hypixel's public auction API.
+// ChudHouse engine — runs entirely in the visitor's browser on Hypixel's public auction API.
 (() => {
   const API = 'https://api.hypixel.net/v2/skyblock';
   const MIN_KEEP = 20_000;              // smallest profit worth computing

@@ -1,4 +1,4 @@
-# SkyFlip
+# ChudHouse
 
 Live Hypixel SkyBlock auction house flip finder. Open the site: **https://zacktihi.github.io/skyflip/**
 

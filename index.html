@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SkyFlip</title>
+<title>ChudHouse</title>
 <meta name="description" content="Live Hypixel SkyBlock auction house flip finder">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -127,7 +127,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 <div class="wrap">
   <header>
     <div>
-      <h1><span class="coin" aria-hidden="true"></span>SkyFlip</h1>
+      <h1><span class="coin" aria-hidden="true"></span>ChudHouse</h1>
       <p class="sub">Live Hypixel SkyBlock BIN flips, straight from Hypixel's auction API</p>
     </div>
     <div class="status" aria-live="polite">
@@ -232,7 +232,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=9"></script>
+<script src="engine.js?v=10"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -242,7 +242,22 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const rank = {confirmed:0, likely:1, unverified:2, risky:3};
   // Name as you'd type it in the auction house search: no stars, symbols or pet level.
   const plainName = n => n.replace(/^\[Lvl \d+\]\s*/, '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
-  const copyButtons = (uuid, name) => `<span class="copies"><button class="copy" data-cmd="/viewauction ${uuid}" data-label="Copy /viewauction" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button><button class="copy" data-cmd="${esc(plainName(name))}" data-label="Copy name" title="Copy the item name for the auction house search">Copy name</button></span>`;
+  // Base item names from Hypixel's official item list, so "Necrotic Storm's
+  // Leggings ✪✪✪" copies as "Storm's Leggings": no reforge, stars or symbols.
+  // Cached in this browser for a day; until it loads, the listing name is used.
+  let baseNames = {};
+  try { const c = JSON.parse(localStorage.getItem('chudhouse-items') || 'null'); if (c && Date.now() - c.at < 864e5) baseNames = c.names; } catch {}
+  if (!Object.keys(baseNames).length) {
+    fetch('https://api.hypixel.net/v2/resources/skyblock/items').then(r => r.json()).then(j => {
+      baseNames = Object.fromEntries((j.items || []).map(i => [i.id, i.name.replace(/§./g, '')]));
+      try { localStorage.setItem('chudhouse-items', JSON.stringify({ at: Date.now(), names: baseNames })); } catch {}
+    }).catch(() => {});
+  }
+  const copyName = (name, key) => {
+    const id = (key || '').split('|')[0];
+    return baseNames[id] || plainName(name); // pets and books keep their listing name
+  };
+  const copyButtons = (uuid, name, key) => `<span class="copies"><button class="copy" data-cmd="/viewauction ${uuid}" data-label="Copy /viewauction" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button><button class="copy" data-cmd="${esc(copyName(name, key))}" data-label="Copy name" title="Copy the item name for the auction house search">Copy name</button></span>`;
   function copyClick(btn) {
     navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = btn.dataset.label, 1200); })
       .catch(() => { btn.textContent = btn.dataset.cmd; });
@@ -288,7 +303,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <td class="num">${f.listed}</td>
         <td><span class="conf ${f.confidence}">${f.confidence}</span>
           <span class="checks"><span class="ck ${cls(c.sales)}" title="${label.sales[c.sales]}">S</span><span class="ck ${cls(c.depth)}" title="${label.depth[c.depth]}">D</span></span></td>
-        <td>${copyButtons(f.uuid, f.name)}</td>
+        <td>${copyButtons(f.uuid, f.name, f.key)}</td>
       </tr>`;
       const det = open.has(f.uuid) ? `<tr class="detail"><td colspan="8"><div class="dgrid">
         <div><span>Next cheapest BIN</span><b>${fmt(f.secondBin * f.count)}</b></div>
@@ -414,7 +429,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td class="num">${fmtVol(s.volume)}</td>
       <td class="num" data-age="${s.start}">${ago(s.start)}</td>
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
-      <td>${copyButtons(s.uuid, s.name)}</td>
+      <td>${copyButtons(s.uuid, s.name, s.key)}</td>
     </tr>`).join('');
   }
   SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } if (s.flips) $('#c-flips').textContent = s.flips.length; });
