@@ -179,6 +179,8 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .ings [data-item]{color:var(--ink)}
 .req-collection{color:var(--info)}
 .req-slayer{color:var(--warn)}
+.preq{font-size:.72rem;color:var(--muted);margin-top:2px;white-space:normal}
+.crafted{color:var(--gold);font-weight:700}
 .evstrip{display:grid;gap:6px;font-size:.84rem;color:var(--muted);padding:2px 2px}
 .evstrip .evrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .evstrip .evlabel{font:600 .7rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;width:84px;flex:none}
@@ -454,6 +456,13 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <option value="order">Buy orders (cheaper, slower)</option>
       </select>
     </div>
+    <div class="field"><label for="cmode">Craft the parts too</label>
+      <select id="cmode" title="Craft each ingredient (and its ingredients) yourself whenever that is cheaper than buying it">
+        <option value="any">When cheaper (any recipe)</option>
+        <option value="noreq">When cheaper (only recipes without requirement)</option>
+        <option value="buy">No, buy every part</option>
+      </select>
+    </div>
     <div class="field"><label for="cmin">Min profit</label><input id="cmin" type="text" inputmode="decimal" value="1" style="width:110px;font-family:var(--f-num)"></div>
     <div class="field"><label>Show</label>
       <div class="chips"><button class="chip" id="call" aria-pressed="false" title="Also list crafts that lose money or can't be priced">Unprofitable too</button></div>
@@ -482,6 +491,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <summary>How these numbers work</summary>
     <div class="legend">
       <span>All 181 talismans, rings and artifacts that are made at a crafting table, with their recipes and unlock requirements from the <a href="https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO" target="_blank" rel="noopener">NotEnoughUpdates item repo</a>. 98 of them need no collection or slayer level, so anyone can craft them.</span>
+      <span><b>Crafting the parts.</b> Every ingredient that has its own recipe is also priced as a craft, all the way down (for example Enchanted Ink Sac from 80 Ink Sacs, or a lower talisman from its own ingredients), and the cheaper of buying or crafting is used. Parts marked <b>⚒</b> are cheaper to craft; hover them to see what goes in and what buying would cost. Crafting a part can need its own collection level: those are listed under the requirement as "parts:". Choose "only recipes without requirement" to keep the whole chain requirement-free, or "buy every part" to price only the final craft.</span>
       <span><b>Craft cost</b> adds up every ingredient at live prices: bazaar items at the instant-buy price (or your buy-order price if you switch above), and auction items, like the lower talisman in an upgrade, at their cheapest BIN. <b>Profit</b> is the talisman's cheapest BIN minus the listing fee and claim tax, minus the craft cost.</span>
       <span>A craft is shown when it makes a profit and every ingredient has a price. Ingredients that can't be bought (soulbound drops, items nobody is selling) make the recipe unpriceable; switch on "Unprofitable too" to see those. Check <b>Sold/day</b> and <b>Listed</b> before crafting a stack: a big profit on a talisman that sells once a day is hard to cash in.</span>
     </div>
@@ -886,13 +896,16 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const s = JSON.parse(localStorage.getItem('chudhouse-crafts') || '{}');
     if (s.req) { creq.clear(); s.req.forEach(x => creq.add(x)); creq.add('other'); }
     if (s.basis) $('#cbasis').value = s.basis;
+    if (s.mode) $('#cmode').value = s.mode;
     if (s.min != null) $('#cmin').value = s.min;
     cAll = !!s.all;
   } catch {}
   document.querySelectorAll('.chip[data-cr]').forEach(b => b.setAttribute('aria-pressed', creq.has(b.dataset.cr)));
   $('#call').setAttribute('aria-pressed', cAll);
-  const persistC = () => { try { localStorage.setItem('chudhouse-crafts', JSON.stringify({ req: [...creq].filter(x => x !== 'other'), basis: $('#cbasis').value, min: $('#cmin').value, all: cAll })); } catch {} };
-  fetch('accessories.json?v=1').then(r => r.json()).then(j => { recipes = j.recipes; renderCrafts(); }).catch(() => { $('#crows').innerHTML = '<tr><td colspan="10" class="empty">Could not load the recipe list.</td></tr>'; });
+  const persistC = () => { try { localStorage.setItem('chudhouse-crafts', JSON.stringify({ req: [...creq].filter(x => x !== 'other'), basis: $('#cbasis').value, mode: $('#cmode').value, min: $('#cmin').value, all: cAll })); } catch {} };
+  let parts = {};
+  fetch('parts.json?v=1').then(r => r.json()).then(j => { parts = j.parts || {}; renderCrafts(); }).catch(() => {});
+  fetch('accessories.json?v=1').then(r => r.json()).then(j => { recipes = j.recipes; for (const r of recipes) if (!parts[r.id]) parts[r.id] = { name: r.name, out: r.out, req: r.req, ing: r.ing }; renderCrafts(); }).catch(() => { $('#crows').innerHTML = '<tr><td colspan="10" class="empty">Could not load the recipe list.</td></tr>'; });
   // Price of one unit of an ingredient: bazaar first, then cheapest BIN.
   function unitPrice(id, basis) {
     const bz = cState && cState.bzMap.get(id);
@@ -901,25 +914,53 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     if (ah) return { p: ah.low, src: 'auction house' };
     return null;
   }
+  // Cheapest way to get one unit of an item: buy it, or craft it from its
+  // recipe with each ingredient itself bought or crafted (whichever is cheaper),
+  // recursively. A guard stops loops such as ingot <-> block.
+  function bestCost(id, basis, mode, memo, stack = new Set()) {
+    if (memo.has(id)) return memo.get(id);
+    const buy = unitPrice(id, basis);
+    let best = buy ? { p: buy.p, how: 'buy', src: buy.src, reqs: [] } : null;
+    const rec = mode !== 'buy' && parts[id];
+    if (rec && !stack.has(id) && stack.size < 8 && !(mode === 'noreq' && rec.req)) {
+      stack.add(id);
+      let sum = 0, ok = true; const reqs = rec.req ? [rec.req] : [], used = [];
+      for (const [ing, n] of Object.entries(rec.ing)) {
+        const c = bestCost(ing, basis, mode, memo, stack);
+        if (!c) { ok = false; break; }
+        sum += c.p * n; used.push({ id: ing, n, c }); reqs.push(...c.reqs);
+      }
+      stack.delete(id);
+      const p = sum / (rec.out || 1);
+      if (ok && (!best || p < best.p * 0.999)) best = { p, how: 'craft', buyP: buy ? buy.p : null, src: 'craft', parts: used, reqs: [...new Set(reqs)] };
+    }
+    if (stack.size === 0) memo.set(id, best);
+    return best;
+  }
+  const craftTip = c => c.how !== 'craft' ? '' : 'Craft from: ' + c.parts.map(x => `${x.n}× ${bzName(x.id)}${x.c.how === 'craft' ? ' (crafted)' : ''}`).join(', ') + ` = ${fmt(c.p)} each` + (c.buyP ? ` · buying costs ${fmt(c.buyP)}` : ' · not for sale');
   function renderCrafts() {
     if (!recipes || !st || !st.lows || !st.bazaar) return;
     if (!cState || cState.bazaar !== st.bazaar || cState.lowsRef !== st.lows) cState = { bazaar: st.bazaar, lowsRef: st.lows, lows: st.lows, bzMap: new Map(st.bazaar.map(r => [r.id, r])) };
-    const basis = $('#cbasis').value, q = $('#cq').value.trim().toLowerCase(), minP = parseAmt($('#cmin').value) || 0;
+    const basis = $('#cbasis').value, mode = $('#cmode').value, q = $('#cq').value.trim().toLowerCase(), minP = parseAmt($('#cmin').value) || 0;
+    const memo = new Map();
     const net = SkyFlipEngine.net || (p => p);
     const rows = [];
     for (const r of recipes) {
-      let cost = 0, missing = [];
+      let cost = 0, missing = [], buyAll = 0, buyOk = true; const partReqs = new Set();
       const parts = Object.entries(r.ing).map(([id, n]) => {
-        const u = unitPrice(id, basis);
-        if (!u) missing.push(id); else cost += u.p * n;
+        const u = bestCost(id, basis, mode, memo);
+        const b = unitPrice(id, basis);
+        if (b) buyAll += b.p * n; else buyOk = false;
+        if (!u) missing.push(id); else { cost += u.p * n; u.reqs.forEach(x => partReqs.add(x)); }
         return { id, n, u };
       });
+      const saved = buyOk && !missing.length && buyAll - cost > 1 ? buyAll - cost : 0;
       const L = cState.lows.get(r.id);
       const sell = L ? L.low : null;
       const priced = !missing.length && sell != null;
       const profit = priced ? Math.round(net(sell * r.out) - cost) : null;
       const row = { ...r, cost: missing.length ? null : cost, sell, profit, margin: priced && cost ? profit / cost : null, listed: L ? L.n : 0, parts, missing,
-        reqRank: { none: 0, collection: 1, slayer: 2, other: 3 }[r.reqType], sales: sales.has(r.id) ? sales.get(r.id) : -1, display: r.name };
+        reqRank: { none: 0, collection: 1, slayer: 2, other: 3 }[r.reqType] + (partReqs.size ? 0.5 : 0), partReqs: [...partReqs], saved, sales: sales.has(r.id) ? sales.get(r.id) : -1, display: r.name };
       if (!creq.has(r.reqType)) continue;
       if (q && !r.name.toLowerCase().includes(q)) continue;
       if (!cAll && !(priced && profit >= minP)) continue;
@@ -931,14 +972,14 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     if (!rows.length) { $('#crows').innerHTML = `<tr><td colspan="10" class="empty">No talisman crafts match these filters right now. Try a lower minimum profit, or switch on "Unprofitable too".</td></tr>`; return; }
     $('#crows').innerHTML = rows.map(x => `<tr>
       <td class="name">${icon(x.id)}<span class="r-${esc(x.tier)}" data-item="${esc(x.id)}" data-kind="ah" data-tier="${esc(x.tier)}">${esc(x.name)}</span>${x.out > 1 ? ` <span class="flag">x${x.out}</span>` : ''}</td>
-      <td>${x.reqType === 'none' ? '<span class="ref solid">none</span>' : `<span class="req-${x.reqType}">${esc(x.req)}</span>`}</td>
-      <td class="num">${x.cost == null ? '<span title="No price for: ' + esc(x.missing.map(bzName).join(', ')) + '">?</span>' : fmt(x.cost)}</td>
+      <td>${x.reqType === 'none' ? '<span class="ref solid">none</span>' : `<span class="req-${x.reqType}">${esc(x.req)}</span>`}${x.partReqs.length ? `<div class="preq" title="Needed to craft the parts that are cheaper to craft than buy">parts: ${esc(x.partReqs.join(', '))}</div>` : ''}</td>
+      <td class="num">${x.cost == null ? '<span title="No price for: ' + esc(x.missing.map(bzName).join(', ')) + '">?</span>' : fmt(x.cost)}${x.saved ? `<div class="preq" title="What crafting the parts yourself saves compared with buying them">−${fmt(x.saved)} by crafting parts</div>` : ''}</td>
       <td class="num">${x.sell == null ? '<span title="None listed right now">–</span>' : fmt(x.sell * x.out)}</td>
       <td class="num ${x.profit > 0 ? 'profit' : 'dip'}">${x.profit == null ? '?' : (x.profit > 0 ? '+' : '') + fmt(Math.abs(x.profit)).replace(/^/, x.profit < 0 ? '−' : '')}</td>
       <td class="num">${x.margin == null ? '–' : (x.margin * 100).toFixed(0) + '%'}</td>
       <td class="num">${x.listed || '–'}</td>
       <td class="num">${sales.has(x.id) ? (sales.get(x.id) >= 10 ? Math.round(sales.get(x.id)) : sales.get(x.id).toFixed(1)) : '<span class="pending">…</span>'}</td>
-      <td class="ings">${x.parts.map(p => `<span title="${p.u ? fmt(p.u.p) + ' each from the ' + p.u.src + ' = ' + fmt(p.u.p * p.n) : 'no price available'}"${p.u ? '' : ' class="dip"'}>${p.n}× <span data-item="${esc(p.id)}" data-kind="${cState.bzMap.has(p.id) ? 'bazaar' : 'ah'}">${esc(bzName(p.id))}</span></span>`).join(', ')}</td>
+      <td class="ings">${x.parts.map(p => `<span title="${!p.u ? 'no price available' : p.u.how === 'craft' ? esc(craftTip(p.u)) + ' · total ' + fmt(p.u.p * p.n) : fmt(p.u.p) + ' each from the ' + p.u.src + ' = ' + fmt(p.u.p * p.n)}"${p.u ? '' : ' class="dip"'}>${p.n}× ${p.u && p.u.how === 'craft' ? '<b class="crafted">⚒</b> ' : ''}<span data-item="${esc(p.id)}" data-kind="${cState.bzMap.has(p.id) ? 'bazaar' : 'ah'}">${esc(bzName(p.id))}</span></span>`).join(', ')}</td>
       <td><span class="copies"><button class="copy" data-cmd="${esc(x.name)}" data-label="Copy name" title="Copy the talisman name">Copy name</button></span></td>
     </tr>`).join('');
     // Load sales speed for the top rows that don't have it yet.
@@ -969,6 +1010,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   $('#call').addEventListener('click', e => { cAll = !cAll; e.currentTarget.setAttribute('aria-pressed', cAll); persistC(); renderCrafts(); });
   ['#cq', '#cmin'].forEach(s => $(s).addEventListener('input', () => { persistC(); renderCrafts(); }));
   $('#cbasis').addEventListener('change', () => { persistC(); renderCrafts(); });
+  $('#cmode').addEventListener('change', () => { persistC(); renderCrafts(); });
   $('#crows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
   window.addEventListener('hashchange', () => { if (location.hash === '#crafts') renderCrafts(); });
 
