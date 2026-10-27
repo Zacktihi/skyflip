@@ -148,6 +148,7 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .tab[aria-current="page"]{color:var(--ink);background:var(--surface);box-shadow:0 1px 2px color-mix(in srgb,var(--ink) 12%,transparent)}
 .tab .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 7px}
 .tab[aria-current="page"] .count{background:var(--gold-soft);color:var(--gold)}
+.icon{width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:-7px;margin-right:9px;flex:none}
 .pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
@@ -282,6 +283,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <div class="field"><label for="bmax">Max price per item</label><input id="bmax" type="text" inputmode="decimal" placeholder="e.g. 50k" style="width:130px;font-family:var(--f-num)"></div>
     <div class="field"><label for="bvol">Min traded per day</label><input id="bvol" type="text" inputmode="decimal" value="1k" style="width:120px;font-family:var(--f-num)"></div>
     <div class="field"><label for="bmargin">Min margin %</label><input id="bmargin" type="text" inputmode="decimal" value="2" style="width:100px;font-family:var(--f-num)"></div>
+    <div class="field"><label for="bmaxm" title="Hides gaps so wide they're usually one odd order or a manipulated item">Max margin %</label><input id="bmaxm" type="text" inputmode="decimal" value="100" style="width:100px;font-family:var(--f-num)"></div>
     <div class="field"><label for="btax">Your bazaar tax</label>
       <select id="btax">
         <option value="0.0125">1.25% (default)</option>
@@ -316,7 +318,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <span><b>Profit / item</b> = sell offer price × (1 − tax) − buy order price. <b>Margin</b> is that profit as a share of what you pay.</span>
       <span><b>Traded / day</b> is the slower of the two sides over the last 7 days: how many items people instantly sold into buy orders, and how many they instantly bought from sell offers. Both your orders need that flow to fill.</span>
       <span><b>Profit / day (10%)</b> assumes you fill a tenth of that daily flow. It's a way to rank items by realistic size, not a promise: other flippers compete for the same orders (see <b>Orders</b>).</span>
-      <span>Very wide gaps on thinly traded items are often manipulated, so check the item's price history in game before committing a lot of coins. Data comes straight from Hypixel and refreshes about every 20 seconds.</span>
+      <span>Very wide gaps on thinly traded items are often manipulated, so <b>Max margin %</b> hides anything above 100% by default; still check the item's price history in game before committing a lot of coins. Data comes straight from Hypixel and refreshes about every 20 seconds.</span>
     </div>
   </details>
   </section>
@@ -348,6 +350,14 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     return baseNames[id] || plainName(name); // pets and books keep their listing name
   };
   const copyButtons = (uuid, name, key) => `<span class="copies"><button class="copy" data-cmd="/viewauction ${uuid}" data-label="Copy /viewauction" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button><button class="copy" data-cmd="${esc(copyName(name, key))}" data-label="Copy name" title="Copy the item name for the auction house search">Copy name</button></span>`;
+  // Item pictures from Coflnet's public icon service. Pets are filed by type
+  // (PET_ENDERMAN), so the rarity is dropped from our grouping key first.
+  const icon = key => {
+    let id = (key || '').split('|')[0];
+    const pet = /^PET_(COMMON|UNCOMMON|RARE|EPIC|LEGENDARY|MYTHIC)_(.+)$/.exec(id);
+    if (pet) id = 'PET_' + pet[2];
+    return id ? `<img class="icon" src="https://sky.coflnet.com/static/icon/${encodeURIComponent(id)}" alt="" width="24" height="24" loading="lazy" onerror="this.style.visibility='hidden'">` : '';
+  };
   function copyClick(btn) {
     navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = btn.dataset.label, 1200); })
       .catch(() => { btn.textContent = btn.dataset.cmd; });
@@ -385,7 +395,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     $('#rows').innerHTML = list.map(f => {
       const c = f.checks;
       const row = `<tr class="row" data-u="${f.uuid}">
-        <td class="name"><span class="r-${esc(f.tier)}">${esc(f.name)}</span>${f.count > 1 ? ` <span class="flag">x${f.count}</span>` : ''}<span class="flags">${f.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+        <td class="name">${icon(f.key)}<span class="r-${esc(f.tier)}">${esc(f.name)}</span>${f.count > 1 ? ` <span class="flag">x${f.count}</span>` : ''}<span class="flags">${f.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
         <td class="num">${fmt(f.price)}</td>
         <td class="num">${fmt(f.sell)}</td>
         <td class="num profit">+${fmt(f.profit)}</td>
@@ -511,7 +521,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     if (!list.length) { $('#srows').innerHTML = `<tr><td colspan="10" class="empty">${pending ? `Checking how fast ${pending} candidate item${pending > 1 ? 's' : ''} sell…` : 'No fast-selling snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.'}</td></tr>`; return; }
     const now = Date.now();
     $('#srows').innerHTML = list.map(s => `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
-      <td class="name"><span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num">${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
       <td class="num">${s.volume === undefined ? '<span class="pending">checking…</span>' : s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
@@ -547,9 +557,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   let bKey = 'potential', bDir = -1, bState = null;
   try {
     const s = JSON.parse(localStorage.getItem('chudhouse-bazaar') || '{}');
-    ['bmax', 'bvol', 'bmargin', 'btax'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
+    ['bmax', 'bvol', 'bmargin', 'bmaxm', 'btax'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
   } catch {}
-  const persistB = () => { try { localStorage.setItem('chudhouse-bazaar', JSON.stringify(Object.fromEntries(['bmax', 'bvol', 'bmargin', 'btax'].map(k => [k, $('#' + k).value])))); } catch {} };
+  const persistB = () => { try { localStorage.setItem('chudhouse-bazaar', JSON.stringify(Object.fromEntries(['bmax', 'bvol', 'bmargin', 'bmaxm', 'btax'].map(k => [k, $('#' + k).value])))); } catch {} };
   const prettyId = id => id.replace(/^ENCHANTMENT_/, '').split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
   const bzName = id => baseNames[id] || (id.startsWith('ENCHANTMENT_') ? prettyId(id) + ' (book)' : prettyId(id));
   const fmtCoins = n => n == null ? '–' : n < 100000 ? n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : fmt(n);
@@ -560,6 +570,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const max = parseAmt($('#bmax').value);
     const minVol = parseAmt($('#bvol').value) || 0;
     const minMargin = (parseFloat($('#bmargin').value) || 0) / 100;
+    const maxMargin = parseFloat($('#bmaxm').value) > 0 ? parseFloat($('#bmaxm').value) / 100 : Infinity;
     let list = [];
     for (const r of bState.bazaar) {
       const buyAt = r.bid + 0.1, sellAt = r.ask - 0.1;
@@ -569,7 +580,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       const daily = Math.min(r.instaSoldWeek, r.instaBoughtWeek) / 7;
       const row = { ...r, name: bzName(r.id), buyAt, sellAt, profit, margin: profit / buyAt, daily,
         competition: r.buyOrders + r.sellOrders, potential: profit * daily * 0.1 };
-      if (row.margin < minMargin || daily < minVol || (max && buyAt > max)) continue;
+      if (row.margin < minMargin || row.margin > maxMargin || daily < minVol || (max && buyAt > max)) continue;
       if (q && !row.name.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q)) continue;
       list.push(row);
     }
@@ -578,7 +589,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     list = list.slice(0, 300);
     if (!list.length) { $('#brows').innerHTML = '<tr><td colspan="9" class="empty">No bazaar items match these filters. Try a lower minimum margin or volume.</td></tr>'; return; }
     $('#brows').innerHTML = list.map(r => `<tr>
-      <td class="name">${esc(r.name)}</td>
+      <td class="name">${icon(r.id)}${esc(r.name)}</td>
       <td class="num">${fmtCoins(r.buyAt)}</td>
       <td class="num">${fmtCoins(r.sellAt)}</td>
       <td class="num profit">+${fmtCoins(r.profit)}</td>
@@ -601,7 +612,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     th.setAttribute('aria-sort', bDir < 0 ? 'descending' : 'ascending');
     renderBazaar();
   }));
-  ['#bq', '#bmax', '#bvol', '#bmargin'].forEach(s => $(s).addEventListener('input', () => { persistB(); renderBazaar(); }));
+  ['#bq', '#bmax', '#bvol', '#bmargin', '#bmaxm'].forEach(s => $(s).addEventListener('input', () => { persistB(); renderBazaar(); }));
   $('#btax').addEventListener('change', () => { persistB(); renderBazaar(); });
   $('#brows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
   setInterval(bazaarAge, 1000);
