@@ -1,0 +1,52 @@
+name: Record prices
+
+# Records the price of every auction house and bazaar item every 30 minutes
+# into the `data` branch, building ChudHouse's own price history.
+on:
+  schedule:
+    - cron: '4,34 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: record-prices
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: site
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Get the recorded data so far
+        run: |
+          if git clone --depth 1 --branch data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data; then
+            echo "Continuing existing history"
+          else
+            mkdir data && cd data && git init -q && git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            echo "Starting a new history"
+          fi
+
+      - name: Record prices
+        run: node site/collector/collect.mjs data
+
+      - name: Save to the data branch
+        # A single commit that replaces the previous one, so the branch doesn't
+        # pile up history; unchanged files are not uploaded again.
+        working-directory: data
+        run: |
+          git config user.name "ChudHouse recorder"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout -q --orphan snapshot
+          git add -A
+          git commit -q -m "Prices recorded $(date -u +'%Y-%m-%d %H:%M') UTC"
+          git push -q -f origin snapshot:data
