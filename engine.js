@@ -259,9 +259,17 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   let lastUpdated = 0, raw = [], lastEnded = 0, lastCycleAt = 0, totalPages = 1;
   // Derpy quadruples the claim tax, so read the current mayor from Hypixel every 10 minutes.
   let mayor = null, mayorAt = 0;
+  const SB_EPOCH = 1560275700000, SB_DAY = 20 * 60e3, SB_YEAR = 372 * SB_DAY;
   async function refreshMayor() {
     if (Date.now() - mayorAt < 10 * 60e3) return;
-    try { const j = await getJSON('https://api.hypixel.net/v2/resources/skyblock/election'); mayor = j.mayor && j.mayor.name; mayorAt = Date.now(); } catch {}
+    try {
+      const j = await getJSON('https://api.hypixel.net/v2/resources/skyblock/election');
+      mayor = j.mayor && j.mayor.name; mayorAt = Date.now();
+      // A mayor elected in SkyBlock year Y takes office on Late Spring 27 of year
+      // Y+1 and serves one SkyBlock year (124 real hours).
+      const y = j.mayor && j.mayor.election && j.mayor.election.year;
+      if (y) { const start = SB_EPOCH + y * SB_YEAR + 88 * SB_DAY; state.mayorTerm = { name: mayor, start, end: start + SB_YEAR }; }
+    } catch {}
   }
   const isDerpy = () => mayor === 'Derpy';
   const listeners = [];
@@ -358,7 +366,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       market: res.market,
     });
     annotateVolumes();
-    wantHistories(res.market);
+    wantHistories();
     evaluateInvestments();
     emit();
     wantVolumes(res.snipes);
@@ -450,6 +458,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // and how much trades: sellMovingWeek = items instantly sold into buy orders,
   // buyMovingWeek = items instantly bought from sell offers (last 7 days).
   // It refreshes about every 20 seconds, independently of the auction loop.
+  let bazaarSeen = false;
   async function bazaarCycle() {
     const j = await getJSON(`${API}/bazaar`);
     const rows = [];
@@ -465,31 +474,43 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     state.bazaar = rows;
     state.bazaarUpdated = j.lastUpdated;
     state.bazaarError = null;
-    emit();
+    if (!bazaarSeen) { bazaarSeen = true; wantHistories(); }
+    evaluateInvestments();
   }
 
   // ---------- investments ----------
-  // Looks for liquid items whose price has dropped well below a stable 30-day
-  // level, without having been in a slide before the drop: the kind of dip that
-  // usually comes back (an event flooding the market, a mayor perk ending...).
+  // Looks for liquid items, on the auction house and the bazaar, whose price
+  // right now is well below a stable 30-day level, without having been in a slide
+  // before: the kind of dip that usually comes back (an event flooding the
+  // market, a mayor's perks lowering demand until the term ends...).
   // Daily price history comes from Coflnet (sky.coflnet.com/api/item/price/
-  // {item}/history/month): 31 days of average, min, max and volume per day.
-  // Fetched for the 120 most-listed plain items worth over 100k, paced well
-  // under Coflnet's limits, and cached in this browser for 6 hours.
-  const HIST_KEY = 'chudhouse-history-v1', HIST_TTL = 6 * 3600e3;
-  const INV_CANDIDATES = 120, INV_MIN_PRICE = 100_000;
-  const histories = new Map(); // item id -> { at, days: [[avg, min, volume], ...] oldest first }
+  // {item}/history/month, newest day first): average, min and volume per day.
+  // Fetched for up to 250 auction items and 150 bazaar items, paced under
+  // Coflnet's limits, and cached in this browser for 6 hours.
+  const HIST_KEY = 'chudhouse-history-v2', HIST_TTL = 6 * 3600e3;
+  const INV_AH = 250, INV_BZ = 150, INV_MIN_PRICE = 100_000;
+  const WATCHLIST = ['STOCK_OF_STONKS']; // always checked first
+  try { localStorage.removeItem('chudhouse-history-v1'); } catch {}
+  const histories = new Map(); // item id -> { at, days: [[time, avg, min, volume], ...] oldest first }
   try { for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(HIST_KEY) || '{}'))) if (Date.now() - v.at < HIST_TTL) histories.set(k, v); } catch {}
   const saveHistories = () => { try { localStorage.setItem(HIST_KEY, JSON.stringify(Object.fromEntries(histories))); } catch {} };
   const histQueue = [];
   let histBusy = false;
-  function wantHistories(market) {
-    const picks = market.filter(m => m.low >= INV_MIN_PRICE).sort((a, b) => b.listed - a.listed).slice(0, INV_CANDIDATES);
+  const bzDaily = r => (r.instaSoldWeek + r.instaBoughtWeek) / 7;
+  function candidates() {
+    const ah = (state.market || []).filter(m => m.low >= INV_MIN_PRICE).sort((a, b) => b.listed - a.listed).slice(0, INV_AH).map(m => m.key);
+    const bz = (state.bazaar || []).filter(r => r.ask >= INV_MIN_PRICE && bzDaily(r) >= 10).sort((a, b) => b.ask * bzDaily(b) - a.ask * bzDaily(a)).slice(0, INV_BZ).map(r => r.id);
+    const out = [...WATCHLIST];
+    for (let i = 0; i < Math.max(ah.length, bz.length); i++) for (const id of [bz[i], ah[i]]) if (id && !out.includes(id)) out.push(id);
+    return out;
+  }
+  function wantHistories() {
+    const picks = candidates();
     state.investTotal = picks.length;
     const now = Date.now();
-    for (const m of picks) {
-      const h = histories.get(m.key);
-      if ((!h || now - h.at > HIST_TTL) && !histQueue.includes(m.key)) histQueue.push(m.key);
+    for (const id of picks) {
+      const h = histories.get(id);
+      if ((!h || now - h.at > HIST_TTL) && !histQueue.includes(id)) histQueue.push(id);
     }
     pumpHistories();
   }
@@ -503,7 +524,8 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
         const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(id)}/history/month`);
         if (r.status === 429) { histQueue.unshift(id); await sleep(15_000); continue; }
         const j = r.ok ? await r.json() : [];
-        histories.set(id, { at: Date.now(), days: (Array.isArray(j) ? j : []).map(d => [d.avg || 0, d.min || 0, d.volume || 0]) });
+        const days = (Array.isArray(j) ? j : []).map(d => [Date.parse(d.time) || 0, d.avg || 0, d.min || 0, d.volume || 0]).sort((x, y) => x[0] - y[0]);
+        histories.set(id, { at: Date.now(), days });
         state.investError = null;
       } catch {
         state.investError = 'Coflnet could not be reached';
@@ -511,42 +533,59 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
         await sleep(30_000);
       }
       if (++since >= 5 || !histQueue.length) { since = 0; evaluateInvestments(); saveHistories(); }
-      await sleep(700);
+      await sleep(650);
     }
     histBusy = false;
   }
   const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   function evaluateInvestments() {
-    if (!state.market) return;
+    const live = new Map();
+    for (const m of state.market || []) live.set(m.key, { kind: 'ah', key: m.key, name: m.name, tier: m.tier, low: m.low, lowUuid: m.lowUuid, listed: m.listed });
+    for (const r of state.bazaar || []) live.set(r.id, { kind: 'bazaar', key: r.id, name: r.id, tier: '', low: r.ask, bid: r.bid, daily: bzDaily(r) });
+    const term = state.mayorTerm, now = Date.now();
+    // The "recent" window covers the current mayor's term so far (at least the
+    // last 2 days, at most 5), so a drop that started when the mayor took office
+    // is measured against prices from before the term.
+    const termDays = term && now > term.start ? (now - term.start) / 864e5 : 0;
+    const window = Math.min(5, Math.max(2, Math.ceil(termDays)));
     const rows = [];
     let checked = 0;
-    for (const m of state.market) {
-      const h = histories.get(m.key);
-      if (!h) continue;
+    for (const [id, h] of histories) {
+      const m = live.get(id);
+      if (!m) continue;
       checked++;
-      const days = h.days.filter(d => d[2] > 0);
-      if (days.length < 20) continue;
-      const recent = days.slice(-2), base = days.slice(0, -2);
-      const vwap = ds => { const v = ds.reduce((s, d) => s + d[2], 0); return v ? ds.reduce((s, d) => s + d[0] * d[2], 0) / v : null; };
-      const recentAvg = vwap(recent), recentMin = med(recent.map(d => d[1]));
-      const baseAvg = med(base.map(d => d[0])), baseMin = med(base.map(d => d[1]));
-      if (!recentAvg || !baseAvg || !baseMin || !recentMin) continue;
-      const dip = 1 - recentAvg / baseAvg, dipMin = 1 - recentMin / baseMin;
-      // Stability of the normal price, and whether it was already sliding.
-      const mean = base.reduce((s, d) => s + d[0], 0) / base.length;
-      const cv = Math.sqrt(base.reduce((s, d) => s + (d[0] - mean) ** 2, 0) / base.length) / mean;
+      const days = h.days.filter(d => d[3] > 0 && d[1] > 0);
+      if (days.length < 15) continue;
+      const cut = now - window * 864e5;
+      const recent = days.filter(d => d[0] >= cut), base = days.filter(d => d[0] < cut);
+      if (!recent.length || base.length < 10) continue;
+      const vwap = ds => { const v = ds.reduce((s, d) => s + d[3], 0); return v ? ds.reduce((s, d) => s + d[1] * d[3], 0) / v : null; };
+      const recentAvg = vwap(recent), baseAvg = med(base.map(d => d[1]));
+      const recentMin = med(recent.map(d => d[2])), baseMin = med(base.map(d => d[2]));
+      if (!recentAvg || !baseAvg || !baseMin) continue;
+      // Normal price you could sell at: bazaar = typical daily average,
+      // auction house = typical daily lowest sale (a cautious BIN price).
+      const normal = m.kind === 'bazaar' ? baseAvg : baseMin;
+      const dip = 1 - m.low / normal;                 // live price vs normal
+      const recentDip = 1 - recentAvg / baseAvg;      // confirmed by actual recent sales
+      const dipMin = recentMin ? 1 - recentMin / baseMin : 0;
+      const mean = base.reduce((s, d) => s + d[1], 0) / base.length;
+      const cv = Math.sqrt(base.reduce((s, d) => s + (d[1] - mean) ** 2, 0) / base.length) / mean;
       const half = base.length >> 1;
-      const trend = med(base.slice(half).map(d => d[0])) / med(base.slice(0, half).map(d => d[0]));
-      const volume = med(days.map(d => d[2]));
-      if (dip < 0.12 || dip > 0.6 || dipMin < 0.10) continue;   // a clear drop on both measures
-      if (cv > 0.3 || trend < 0.9 || volume < 10) continue;       // stable, not sliding, liquid
-      const recovery = baseAvg / recentAvg;                      // how far back up "normal" is
-      const target = m.low * recovery;
-      const profit = Math.round(net(target, isDerpy()) - m.low);
+      const trend = med(base.slice(half).map(d => d[1])) / med(base.slice(0, half).map(d => d[1]));
+      const volume = m.kind === 'bazaar' ? m.daily : med(days.map(d => d[3]));
+      if (dip < 0.12 || dip > 0.6) continue;                         // clearly below normal right now
+      if (recentDip < 0.05 || (m.kind === 'ah' && dipMin < 0.08)) continue; // and sales have actually dropped
+      if (cv > 0.3 || trend < 0.9 || volume < 10) continue;           // stable, not sliding, liquid
+      const target = normal;
+      const profit = Math.round((m.kind === 'bazaar' ? target * (1 - 0.0125) : net(target, isDerpy())) - m.low);
       if (profit <= 0) continue;
+      // Did the drop start once the current mayor took office?
+      const preTerm = term ? days.filter(d => d[0] < term.start - 864e5).slice(-3) : [];
+      const sinceMayor = !!(term && termDays >= 0.5 && preTerm.length && med(preTerm.map(d => d[1])) >= baseAvg * 0.95);
       const confidence = cv <= 0.15 && trend >= 0.97 && volume >= 50 ? 'strong' : 'moderate';
-      rows.push({ ...m, target, profit, upside: profit / m.low, dip, dipMin, cv, trend, volume, confidence,
-        spark: days.map(d => d[0]), baseAvg });
+      rows.push({ ...m, target, profit, upside: profit / m.low, dip, recentDip, dipMin, cv, trend, volume, confidence,
+        sinceMayor, spark: days.map(d => d[1]), baseAvg });
     }
     rows.sort((a, b) => b.profit - a.profit);
     state.invest = rows;
@@ -560,7 +599,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     start() {
       startWorker();
       (async () => { for (;;) { try { await cycle(); } catch (e) { state.error = e.message; emit(); await sleep(5000); } } })();
-      (async () => { for (;;) { try { await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
+      (async () => { for (;;) { try { await refreshMayor(); await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
     },
     on(f) { listeners.push(f); },
   };

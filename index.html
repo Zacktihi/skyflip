@@ -207,6 +207,12 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <button class="chip" data-ic="moderate" aria-pressed="true">Moderate</button>
       </div>
     </div>
+    <div class="field"><label>Market</label>
+      <div class="chips" role="group" aria-label="Market filter">
+        <button class="chip" data-ik="ah" aria-pressed="true">Auction house</button>
+        <button class="chip" data-ik="bazaar" aria-pressed="true">Bazaar</button>
+      </div>
+    </div>
     <div class="field"><label>Price history</label><span class="toggle" id="i-progress">–</span></div>
   </div>
 
@@ -214,11 +220,11 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <table>
       <thead><tr>
         <th data-i="name">Item</th>
-        <th data-i="low" class="num" title="Cheapest Buy It Now right now">Buy now</th>
-        <th data-i="target" class="num" title="Today's cheapest BIN scaled back up to the item's normal 30-day price">If it recovers</th>
+        <th data-i="low" class="num" title="Cheapest Buy It Now on the auction house, or the instant-buy price on the bazaar">Buy now</th>
+        <th data-i="target" class="num" title="The item's normal price over the last month, from before the current dip">If it recovers</th>
         <th data-i="profit" class="num" aria-sort="descending">Profit after tax</th>
         <th data-i="upside" class="num">Upside</th>
-        <th data-i="dip" class="num" title="How far the last 2 days are below the 30-day normal price">Dip</th>
+        <th data-i="dip" class="num" title="How far today's price is below the normal price">Dip</th>
         <th>Last 30 days</th>
         <th data-i="volume" class="num" title="Typical sales per day over the last month">Sold/day</th>
         <th data-i="confRank">Confidence</th>
@@ -232,8 +238,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <summary>How these numbers work</summary>
     <div class="legend">
       <span>Investments are liquid items whose price has <b>dropped well below a stable 30-day level</b>: the kind of dip that tends to come back once whatever caused it passes, such as an event flooding the market or a mayor perk ending.</span>
-      <span>Each scan takes the 120 most-listed plain items worth over 100k and loads their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a> (cached for 6 hours). An item is shown when the last 2 days are 12–60% below its normal price on both its average and its lowest sales, its price was steady before that, it wasn't already sliding, and it sells at least 10 a day.</span>
-      <span><b>If it recovers</b> is today's cheapest BIN scaled back up to the normal price. <b>Profit</b> is that minus the listing fee and claim tax and what you pay now. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 sales a day.</span>
+      <span>Each scan checks the 250 most-listed plain auction house items and the 150 most-traded bazaar items worth over 100k (Stock of Stonks is always included), using their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. The first visit takes about 4 minutes to load them all; after that they are cached for 6 hours.</span>
+      <span>An item is shown when <b>today's price is 12–60% below its normal price</b> and its recent sales have dropped too, its price was steady before that, it wasn't already sliding, and it trades at least 10 a day. "Recent" means the current mayor's term so far (at least 2 days), so a drop caused by the mayor is compared with prices from before they took office. Those get a <b>mayor dip</b> tag; they often recover when the term ends.</span>
+      <span><b>If it recovers</b> is the normal price: the typical daily average for bazaar items, and the typical lowest daily sale for auction items (a cautious BIN price). <b>Profit</b> is that minus tax (bazaar 1.25%; auction listing fee and claim tax) and what you pay now. On the bazaar a buy order is cheaper than the instant-buy price shown, just slower. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 trades a day.</span>
       <span>Nothing here is guaranteed. A dip can also be the start of a lasting drop, for example after a game update makes an item easier to get, so check recent SkyBlock news before investing a lot.</span>
     </div>
   </details>
@@ -367,7 +374,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=16"></script>
+<script src="engine.js?v=17"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -428,14 +435,16 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 
   // ---------- investments ----------
   let iKey = 'profit', iDir = -1;
-  const iconf = new Set(['strong', 'moderate']);
+  const iconf = new Set(['strong', 'moderate']), ikind = new Set(['ah', 'bazaar']);
   try {
     const s = JSON.parse(localStorage.getItem('chudhouse-invest') || '{}');
     ['imax', 'iup'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
     if (s.conf) { iconf.clear(); s.conf.forEach(c => iconf.add(c)); }
+    if (s.kind) { ikind.clear(); s.kind.forEach(c => ikind.add(c)); }
   } catch {}
   document.querySelectorAll('.chip[data-ic]').forEach(b => b.setAttribute('aria-pressed', iconf.has(b.dataset.ic)));
-  const persistI = () => { try { localStorage.setItem('chudhouse-invest', JSON.stringify({ imax: $('#imax').value, iup: $('#iup').value, conf: [...iconf] })); } catch {} };
+  document.querySelectorAll('.chip[data-ik]').forEach(b => b.setAttribute('aria-pressed', ikind.has(b.dataset.ik)));
+  const persistI = () => { try { localStorage.setItem('chudhouse-invest', JSON.stringify({ imax: $('#imax').value, iup: $('#iup').value, conf: [...iconf], kind: [...ikind] })); } catch {} };
   // 30-day price line, scaled to its own range, with the normal price dashed.
   function spark(values, base) {
     const w = 120, h = 32, lo = Math.min(...values, base), hi = Math.max(...values, base), span = hi - lo || 1;
@@ -446,17 +455,19 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }
   function renderInvest() {
     if (!st) return;
-    $('#i-progress').textContent = st.investError ? st.investError + ', retrying' : st.investTotal ? `${Math.min(st.investChecked || 0, st.investTotal)} of ${st.investTotal} items checked` : 'waiting for the auction house…';
+    const t = st.mayorTerm, left = t ? t.end - Date.now() : 0;
+    const termNote = t && left > 0 ? ` · ${t.name}'s term ends in ${Math.floor(left / 864e5)}d ${Math.floor(left % 864e5 / 36e5)}h` : '';
+    $('#i-progress').textContent = (st.investError ? st.investError + ', retrying' : st.investTotal ? `${Math.min(st.investChecked || 0, st.investTotal)} of ${st.investTotal} items checked` : 'waiting for the auction house…') + termNote;
     if (!st.invest) return;
     const q = $('#iq').value.trim().toLowerCase(), max = parseAmt($('#imax').value), minUp = (parseFloat($('#iup').value) || 0) / 100;
-    let list = st.invest.map(r => ({ ...r, display: copyName(r.name, r.key), confRank: r.confidence === 'strong' ? 0 : 1 }))
-      .filter(r => iconf.has(r.confidence) && r.upside >= minUp && (!max || r.low <= max) && (!q || r.display.toLowerCase().includes(q)));
+    let list = st.invest.map(r => ({ ...r, display: r.kind === 'bazaar' ? bzName(r.key) : copyName(r.name, r.key), confRank: r.confidence === 'strong' ? 0 : 1 }))
+      .filter(r => iconf.has(r.confidence) && ikind.has(r.kind) && r.upside >= minUp && (!max || r.low <= max) && (!q || r.display.toLowerCase().includes(q)));
     list.sort((a, b) => { const x = iKey === 'name' ? a.display : a[iKey], y = iKey === 'name' ? b.display : b[iKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * iDir; });
     $('#c-inv').textContent = list.length;
     if (!list.length) { $('#irows').innerHTML = `<tr><td colspan="10" class="empty">${(st.investChecked || 0) < (st.investTotal || 1) ? 'Still loading price histories; investments appear here as they are checked.' : 'No items have dipped below a stable price right now. Prices are checked again every few minutes.'}</td></tr>`; return; }
     $('#irows').innerHTML = list.map(r => `<tr>
-      <td class="name">${icon(r.key)}<span class="r-${esc(r.tier)}">${esc(r.display)}</span></td>
-      <td class="num">${fmt(r.low)}</td>
+      <td class="name">${icon(r.key)}<span class="r-${esc(r.tier)}">${esc(r.display)}</span>${r.kind === 'bazaar' ? ' <span class="flag">bazaar</span>' : ''}${r.sinceMayor && st.mayorTerm ? ` <span class="flag tag-auction" title="The price was normal before ${esc(st.mayorTerm.name)} took office and dropped after. Mayor-driven dips often recover when the term ends.">mayor dip</span>` : ''}</td>
+      <td class="num"${r.kind === 'bazaar' ? ` title="Instant-buy price. A buy order at about ${fmt(r.bid)} costs less but takes longer to fill."` : ''}>${fmt(r.low)}</td>
       <td class="num">${fmt(r.target)}</td>
       <td class="num profit">+${fmt(r.profit)}</td>
       <td class="num">${(r.upside * 100).toFixed(1)}%</td>
@@ -464,7 +475,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td>${spark(r.spark, r.baseAvg)}</td>
       <td class="num">${Math.round(r.volume).toLocaleString()}</td>
       <td><span class="ref ${r.confidence === 'strong' ? 'solid' : 'likely'}" title="Price varied ${(r.cv * 100).toFixed(0)}% day to day before the dip; ${r.trend >= 1 ? 'no downward drift' : 'drifted ' + ((1 - r.trend) * 100).toFixed(0) + '% lower'}">${r.confidence}</span></td>
-      <td>${copyButtons(r.lowUuid, r.name, r.key)}</td>
+      <td>${r.kind === 'bazaar' ? `<span class="copies"><button class="copy" data-cmd="${esc(r.display)}" data-label="Copy name" title="Copy the item name for the bazaar search">Copy name</button></span>` : copyButtons(r.lowUuid, r.name, r.key)}</td>
     </tr>`).join('');
   }
   SkyFlipEngine.on(() => renderInvest());
@@ -474,6 +485,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     document.querySelectorAll('th[data-i]').forEach(t => t.removeAttribute('aria-sort'));
     th.setAttribute('aria-sort', iDir < 0 ? 'descending' : 'ascending');
     renderInvest();
+  }));
+  document.querySelectorAll('.chip[data-ik]').forEach(b => b.addEventListener('click', () => {
+    const c = b.dataset.ik; ikind.has(c) ? ikind.delete(c) : ikind.add(c); b.setAttribute('aria-pressed', ikind.has(c)); persistI(); renderInvest();
   }));
   document.querySelectorAll('.chip[data-ic]').forEach(b => b.addEventListener('click', () => {
     const c = b.dataset.ic; iconf.has(c) ? iconf.delete(c) : iconf.add(c); b.setAttribute('aria-pressed', iconf.has(c)); persistI(); renderInvest();
