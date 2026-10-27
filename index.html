@@ -255,6 +255,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <span>Each scan checks the 250 most-listed plain auction house items and the 150 most-traded bazaar items worth over 100k (Stock of Stonks is always included), using their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. The first visit takes about 4 minutes to load them all; after that they are cached for 6 hours.</span>
       <span>An item is shown when <b>today's price is 12–60% below its normal price</b> and its recent sales have dropped too, its price was steady before that, it wasn't already sliding, and it trades at least 10 a day. "Recent" means the current mayor's term so far (at least 2 days), so a drop caused by the mayor is compared with prices from before they took office. Those get a <b>mayor dip</b> tag; they often recover when the term ends.</span>
       <span><b>Events.</b> The lines above the table show SkyBlock events from the last 7 days, happening now, and coming in the next 7 days, worked out from the SkyBlock calendar and the current mayor's perks: Year of the Seal and Year of the Pig (each comes around every 12 SkyBlock years and lasts the whole year; the Pig falls 6 years after the Seal), Spooky Festival, Season of Jerry, New Year, Traveling Zoo, Mining Fiesta, Fishing Festival and Diana's Mythological Ritual. Items an event hands out are always checked. If one is cheap because a running event is adding supply, it gets a <b>green tag</b> with the event's name, and its price is compared with before the event started; these usually recover after the event. If an event that adds more of it starts soon, it gets an <b>orange tag</b> and is never rated Strong, since the price can drop further first.</span>
+      <span><b>Own price history.</b> ChudHouse records the price of every auction house and bazaar item every 30 minutes on GitHub's servers, whether or not the site is open: hourly prices for the last 14 days and a daily summary kept for good, in the <a href="https://github.com/Zacktihi/skyflip/tree/data" target="_blank" rel="noopener">data branch</a>. Once an item has 20 days of its own history it is judged on that instead of Coflnet's (auction items still use Coflnet for how often they sell). Hover the 30-day line to see which source a row uses.</span>
       <span><b>If it recovers</b> is the normal price: the typical daily average for bazaar items, and the typical lowest daily sale for auction items (a cautious BIN price). <b>Profit</b> is that minus tax (bazaar 1.25%; auction listing fee and claim tax) and what you pay now. On the bazaar a buy order is cheaper than the instant-buy price shown, just slower. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 trades a day.</span>
       <span>Nothing here is guaranteed. A dip can also be the start of a lasting drop, for example after a game update makes an item easier to get, so check recent SkyBlock news before investing a lot.</span>
     </div>
@@ -389,7 +390,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=19"></script>
+<script src="engine.js?v=20"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -470,6 +471,14 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }
   // "3d 4h 1m", "5h 10m" or "12m" until a time.
   const until = t => { const m = Math.max(0, Math.round((t - Date.now()) / 60e3)), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); return d ? `${d}d ${hh}h ${m % 60}m` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
+  // How much of ChudHouse's own price history has been recorded so far.
+  function ownNote() {
+    const o = st.own;
+    if (!o) return '';
+    if (o.missing) return ' · own price history: starting soon';
+    const d = new Date(o.since).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return ` · own price history: ${o.items.toLocaleString()} items since ${d} (${o.days} ${o.days === 1 ? 'day' : 'days'})`;
+  }
   function renderEvents() {
     const ev = st.events, t = st.mayorTerm;
     if (!ev && !t) { $('#i-events').innerHTML = ''; return; }
@@ -486,7 +495,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   function renderInvest() {
     if (!st) return;
     renderEvents();
-    $('#i-progress').textContent = (st.investError ? st.investError + ', retrying' : st.investTotal ? `${Math.min(st.investChecked || 0, st.investTotal)} of ${st.investTotal} items checked` : 'waiting for the auction house…');
+    $('#i-progress').textContent = (st.investError ? st.investError + ', retrying' : st.investTotal ? `${Math.min(st.investChecked || 0, st.investTotal)} of ${st.investTotal} items checked` : 'waiting for the auction house…') + ownNote();
     if (!st.invest) return;
     const q = $('#iq').value.trim().toLowerCase(), max = parseAmt($('#imax').value), minUp = (parseFloat($('#iup').value) || 0) / 100;
     let list = st.invest.map(r => ({ ...r, display: r.kind === 'bazaar' ? bzName(r.key) : copyName(r.name, r.key), confRank: r.confidence === 'strong' ? 0 : 1 }))
@@ -501,7 +510,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td class="num profit">+${fmt(r.profit)}</td>
       <td class="num">${(r.upside * 100).toFixed(1)}%</td>
       <td class="num dip">−${(r.dip * 100).toFixed(0)}%</td>
-      <td>${spark(r.spark, r.baseAvg)}</td>
+      <td title="${r.sourceDays}-day price history from ${r.source === 'ChudHouse' ? "ChudHouse's own recordings" : 'Coflnet'}">${spark(r.spark, r.baseAvg)}</td>
       <td class="num">${Math.round(r.volume).toLocaleString()}</td>
       <td><span class="ref ${r.confidence === 'strong' ? 'solid' : 'likely'}" title="Price varied ${(r.cv * 100).toFixed(0)}% day to day before the dip; ${r.trend >= 1 ? 'no downward drift' : 'drifted ' + ((1 - r.trend) * 100).toFixed(0) + '% lower'}">${r.confidence}</span></td>
       <td>${r.kind === 'bazaar' ? `<span class="copies"><button class="copy" data-cmd="${esc(r.display)}" data-label="Copy name" title="Copy the item name for the bazaar search">Copy name</button></span>` : copyButtons(r.lowUuid, r.name, r.key)}</td>

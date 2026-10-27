@@ -591,6 +591,37 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     }
     histBusy = false;
   }
+  // ---------- ChudHouse's own price history ----------
+  // A GitHub Actions job (collector/collect.mjs) records every item's price every
+  // 30 minutes into the repo's `data` branch. summary.json holds the last 30
+  // days per item: auction items [day, median lowest BIN, min, max, listings],
+  // bazaar items [day, avg buy, avg sell, weekly volume].
+  const DATA_URL = 'https://raw.githubusercontent.com/Zacktihi/skyflip/data/';
+  const OWN_MIN_DAYS = 20; // days recorded before an item is judged on its own history
+  const own = { summary: null, meta: null };
+  async function refreshOwn() {
+    try {
+      const [meta, summary] = await Promise.all(['meta.json', 'summary.json'].map(f => getJSON(DATA_URL + f + '?t=' + Math.floor(Date.now() / 300e3), 30_000)));
+      own.meta = meta; own.summary = summary;
+      const days = Math.max(0, ...Object.values(summary.ah).concat(Object.values(summary.bz)).map(a => a.length));
+      state.own = { since: meta.firstRun, last: meta.lastRun, runs: meta.runs, items: Object.keys(summary.ah).length + Object.keys(summary.bz).length, days };
+    } catch { state.own = state.own || { missing: true }; }
+    emit();
+  }
+  // Own daily points as [time, avg, min, volume per day], or null when there
+  // are fewer than OWN_MIN_DAYS. Auction items take sales volume from Coflnet,
+  // since listings say nothing about how often an item sells.
+  function ownHistory(id, kind, coflDays) {
+    const S = own.summary; if (!S) return null;
+    const pts = kind === 'bazaar' ? S.bz[id] : S.ah[id];
+    if (!pts || pts.length < OWN_MIN_DAYS) return null;
+    const start = Date.parse(S.start) + 12 * 36e5;
+    if (kind === 'bazaar') return pts.map(p => [start + p[0] * 864e5, (p[1] + p[2]) / 2 || p[1] || p[2], Math.min(p[1] || Infinity, p[2] || Infinity), p[3] / 7]);
+    if (!coflDays.length) return null;
+    const vol = med(coflDays.map(d => d[3]));
+    return pts.map(p => [start + p[0] * 864e5, p[1], p[2], vol]);
+  }
+
   const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
   function evaluateInvestments() {
     const live = new Map();
@@ -605,11 +636,18 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const ev = refreshEvents();
     const rows = [];
     let checked = 0;
-    for (const [id, h] of histories) {
-      const m = live.get(id);
+    // Items with enough of ChudHouse's own recorded history are judged on it;
+    // the rest on Coflnet's.
+    const ids = new Set(histories.keys());
+    if (own.summary) for (const id of Object.keys(own.summary.bz)) if (own.summary.bz[id].length >= OWN_MIN_DAYS) ids.add(id);
+    for (const id of ids) {
+      const m = live.get(id), h = histories.get(id);
       if (!m) continue;
       checked++;
-      const days = h.days.filter(d => d[3] > 0 && d[1] > 0);
+      const coflDays = h ? h.days.filter(d => d[3] > 0 && d[1] > 0) : [];
+      const ownDays = ownHistory(id, m.kind, coflDays);
+      const source = ownDays ? 'ChudHouse' : 'Coflnet';
+      const days = ownDays || coflDays;
       // Event running that adds supply of this item, and one coming up soon.
       const event = ev.active.find(x => x.items.includes(id)), soon = ev.upcoming.find(x => x.items.includes(id));
       // An item dipping because of a running event is compared with prices from
@@ -648,7 +686,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       const confidence = !soon && cv <= 0.15 && trend >= 0.97 && volume >= 50 ? 'strong' : 'moderate';
       rows.push({ ...m, target, profit, upside: profit / m.low, dip, recentDip, dipMin, cv, trend, volume, confidence,
         sinceMayor: sinceMayor && !event, event: event ? { name: event.name, end: event.end, over: event.over } : null,
-        soon: soon ? { name: soon.name, start: soon.start } : null, spark: days.map(d => d[1]), baseAvg });
+        soon: soon ? { name: soon.name, start: soon.start } : null, spark: days.map(d => d[1]), baseAvg, source, sourceDays: days.length });
     }
     rows.sort((a, b) => b.profit - a.profit);
     state.invest = rows;
@@ -662,6 +700,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     start() {
       startWorker();
       (async () => { for (;;) { try { await cycle(); } catch (e) { state.error = e.message; emit(); await sleep(5000); } } })();
+      (async () => { for (;;) { await refreshOwn(); await sleep(30 * 60e3); } })();
       (async () => { for (;;) { try { await refreshMayor(); await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
     },
     on(f) { listeners.push(f); },
