@@ -33,13 +33,18 @@ else{if(x.rarity_upgrades)parts.push('recomb');const st=x.upgrade_level!=null?x.
 if(x.skin)parts.push('skin:'+x.skin);if(x.attributes&&typeof x.attributes==='object'){const a=Object.entries(x.attributes).sort().map(([k,v])=>k+v).join(',');if(a)parts.push('attr:'+a)}
 if(x.enchantments&&Object.keys(x.enchantments).length)flags.push('enchanted');if(x.hot_potato_count)flags.push('hpb'+x.hot_potato_count)}
 return {key:parts.join('|'),count,flags}}catch(e){return null}}
-onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)]);postMessage({job:e.data.job,out})};`;
+onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:null}),e.data.sleep);return}const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)]);postMessage({job:e.data.job,out})};`;
 
   let worker, jobN = 0;
   const pending = new Map();
   function startWorker() {
     worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: 'text/javascript' })));
     worker.onmessage = e => { const r = pending.get(e.data.job); pending.delete(e.data.job); r && r(e.data.out); };
+  }
+  // Timers run inside the worker: browsers throttle main-page timers in
+  // background tabs (down to once a minute), but not a worker's.
+  function sleep(ms) {
+    return new Promise(res => { const job = ++jobN; pending.set(job, res); worker.postMessage({ job, sleep: Math.max(0, ms) }); });
   }
   function decode(items) {
     if (!items.length) return Promise.resolve([]);
@@ -216,7 +221,7 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
         state.error = null;
         if (first.lastUpdated !== lastUpdated) break;
       } catch (e) { state.error = e.message; emit(); }
-      await new Promise(r => setTimeout(r, 1000));
+      await sleep(1000);
     }
     const t0 = performance.now();
     const pageReqs = [];
@@ -257,7 +262,7 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
     });
     emit();
     const wait = first.lastUpdated + 57_000 - Date.now();
-    await new Promise(r => setTimeout(r, Math.max(500, Math.min(wait, 60_000))));
+    await sleep(Math.max(500, Math.min(wait, 60_000)));
   }
 
   function emit() { listeners.forEach(f => f(state)); }
@@ -265,7 +270,7 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
   window.SkyFlipEngine = {
     start() {
       startWorker();
-      (async () => { for (;;) { try { await cycle(); } catch (e) { state.error = e.message; emit(); await new Promise(r => setTimeout(r, 5000)); } } })();
+      (async () => { for (;;) { try { await cycle(); } catch (e) { state.error = e.message; emit(); await sleep(5000); } } })();
     },
     on(f) { listeners.push(f); },
   };
