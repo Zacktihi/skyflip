@@ -186,10 +186,11 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // A listing qualifies when it costs a third of that or less. When the gap is
   // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
   const SNIPE_RATIO = 3;
-  // Bid auctions: look at ones ending within 15 minutes. The next bid has to beat
+  // Bid auctions: look at ones ending within 5 minutes (earlier than that they
+  // nearly always get bid up to the item's value). The next bid has to beat
   // the current one by about 15%, and a snipe needs the item to be worth at
   // least 1.5x that bid (a bid auction rarely ends at a third of the price).
-  const ENDING_WINDOW = 15 * 60e3, BID_STEP = 1.15, ENDING_RATIO = 1.5;
+  const ENDING_WINDOW = 5 * 60e3, BID_STEP = 1.15, ENDING_RATIO = 1.5;
   // How many zeros does the gap look like? Allow ±40% around each power of ten.
   function zerosFor(ratio) {
     const z = Math.round(Math.log10(ratio));

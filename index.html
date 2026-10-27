@@ -241,7 +241,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <button class="chip" data-r="check" aria-pressed="false">Check</button>
         <button class="chip" id="f-zeros" aria-pressed="false">Missing zeros only</button>
         <button class="chip" data-t="bin" aria-pressed="true" title="Buy It Now listings priced far below market">BIN</button>
-        <button class="chip" data-t="auction" aria-pressed="true" title="Bid auctions ending within 15 minutes with a low next bid">Ending auctions</button>
+        <button class="chip" data-t="auction" aria-pressed="true" title="Bid auctions ending within 5 minutes with a low next bid">Ending auctions</button>
       </div>
     </div>
     <div class="field"><label for="smin">Min sales per day</label><input id="smin" type="text" inputmode="decimal" value="10" style="width:110px;font-family:var(--f-num)"></div>
@@ -271,7 +271,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
-    <span><b>Two kinds of snipe.</b> <b>BIN</b>: a Buy It Now listing at a third of the market price or less. <b>Ending auctions</b> (tagged <i>auction</i>): a bid auction ending within 15 minutes whose next bid (about 15% above the current one) is two-thirds of the market price or less. Other players can still outbid you, and Hypixel's data is up to a minute old, so check the current bid in game.</span>
+    <span><b>Two kinds of snipe.</b> <b>BIN</b>: a Buy It Now listing at a third of the market price or less. <b>Ending auctions</b> (tagged <i>auction</i>): a bid auction ending within 5 minutes whose next bid (about 15% above the current one) is two-thirds of the market price or less. Other players can still outbid you, and Hypixel's data is up to a minute old, so check the current bid in game.</span>
     <span>The scan reads auction pages from both ends inward and shows snipes from the first pages as soon as they arrive. A page that takes more than 5 seconds is skipped for that update so the rest isn't held up.</span>
     <span>A BIN snipe is a listing at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
     <span><b>Market</b> is the lowest of: the middle of the three cheapest listings from other sellers, sales recorded in this browser, and the <b>3-day price</b> (the median sale over the last 3 days for the same rarity, stars or pet level, from Coflnet). A snipe has to be a third of that or less.</span>
@@ -330,7 +330,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=13"></script>
+<script src="engine.js?v=14"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
