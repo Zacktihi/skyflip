@@ -164,6 +164,23 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // A listing qualifies when it costs a third of that or less. When the gap is
   // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
   const SNIPE_RATIO = 3;
+  // How many zeros does the gap look like? Allow ±40% around each power of ten.
+  function zerosFor(ratio) {
+    const z = Math.round(Math.log10(ratio));
+    return z >= 1 && ratio / 10 ** z >= 0.6 && ratio / 10 ** z <= 1.4 ? z : 0;
+  }
+  // Fold in the 3-day median sale price once it's known: the market price can
+  // only go down, so a snipe has to be cheap against what the item has really
+  // been selling for, not just against today's listings.
+  function applyThreeDay(s) {
+    s.market = s.avg3d ? Math.min(s.baseMarket, s.avg3d) : s.baseMarket;
+    s.ratio = s.market / s.unit;
+    s.profit = Math.round(net(s.market * s.count, isDerpy()) - s.price);
+    s.margin = s.profit / s.price;
+    s.missingZeros = zerosFor(s.ratio);
+    s.below3d = !!s.avg3d && (s.ratio < SNIPE_RATIO || s.profit < 100_000);
+    s.reference = s.avg3d && Math.abs(s.avg3d - s.listMedian) / s.listMedian <= 0.25 ? 'solid' : s.baseReference;
+  }
   const SNIPE_MAX_AGE = 30 * 60e3; // a real typo gets bought within minutes; older ones usually aren't cheap
   function findSnipe(low, others, histMedian, histN, derpy) {
     if (Date.now() - low.start > SNIPE_MAX_AGE) return null;
@@ -180,9 +197,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const profit = Math.round(net(market * low.count, derpy) - low.price);
     if (profit < 100_000) return null;
 
-    // How many zeros does the gap look like? Allow ±40% around each power of ten.
-    const zeros = Math.round(Math.log10(ratio));
-    const missingZeros = zeros >= 1 && ratio / 10 ** zeros >= 0.6 && ratio / 10 ** zeros <= 1.4 ? zeros : 0;
+    const missingZeros = zerosFor(ratio);
 
     // How trustworthy is the market price?
     // solid  — real sales agree with the listings, or three sellers list within 15% of each other
@@ -193,7 +208,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const pair = refs.length >= 2 && (refs[1] - refs[0]) / refs[0] <= 0.30;
     const reference = salesAgree || tight ? 'solid' : pair ? 'likely' : 'check';
 
-    return { ...low, market, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
+    return { ...low, market, baseMarket: market, baseReference: reference, listMedian, histMedian, histN, refs, ratio, missingZeros, reference,
       profit, margin: profit / low.price, listed: others.length + 1 };
   }
 
@@ -269,9 +284,86 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
     });
+    annotateVolumes();
     emit();
+    wantVolumes(res.snipes);
     // Sleep until just before the next expected rebuild, then poll every second.
     await sleep(Math.max(500, Math.min(ended.lastUpdated + 57_000 - Date.now(), 60_000)));
+  }
+
+  // ---------- sales speed (Coflnet) ----------
+  // Hypixel's API only lists the last minute of sales, so how fast an item sells
+  // comes from Coflnet's public price API (sky.coflnet.com), which allows
+  // requests from any site. Its price summary covers the last 3 days: "volume"
+  // is the average sales per day and "median" the typical sale price.
+  // Results are cached for 3 hours and requests are paced well under its limit
+  // (30 per 10 seconds); none of this ever delays a Hypixel refresh.
+  const VOL_KEY = 'skyflip-volume-v1', VOL_TTL = 3 * 3600e3;
+  const volumes = new Map(); // coflnet id -> { v: sales/day or null, at }
+  try { for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(VOL_KEY) || '{}'))) volumes.set(k, v); } catch {}
+  const saveVolumes = () => { try { const o = {}; const cut = Date.now() - VOL_TTL; for (const [k, v] of volumes) if (v.at > cut && v.v != null) o[k] = v; localStorage.setItem(VOL_KEY, JSON.stringify(o)); } catch {} };
+  const volQueue = [];
+  let volBusy = false;
+  // Build the Coflnet query that matches this exact kind of item: same rarity
+  // (which also covers recombobulated items), same stars, same pet level range.
+  function coflFor(s) {
+    const parts = s.key.split('|');
+    const pet = /^PET_(COMMON|UNCOMMON|RARE|EPIC|LEGENDARY|MYTHIC)_(.+)$/.exec(parts[0]);
+    const q = new URLSearchParams();
+    let tag = parts[0];
+    if (pet) {
+      tag = 'PET_' + pet[2];
+      q.set('Rarity', pet[1]);
+      const lv = /^L(\d+)(s|\+)?$/.exec(parts[1] || '');
+      if (lv) q.set('PetLevel', lv[2] ? `${lv[1]}-${+lv[1] + 9}` : lv[1]);
+    } else if (!tag.startsWith('ENCHANTMENT_')) {
+      if (s.tier) q.set('Rarity', s.tier);
+      const st = parts.find(p => p.startsWith('stars:'));
+      if (st) q.set('Stars', st.slice(6));
+    }
+    const qs = q.toString();
+    // Kuudra attributes aren't matched, so the 3-day price would be misleading there.
+    return { tag, q: qs ? '?' + qs : '', id: tag + (qs ? '?' + qs : ''), priceOk: !parts.some(p => p.startsWith('attr:')) };
+  }
+  function annotateVolumes() {
+    if (!state.snipes) return;
+    for (const s of state.snipes) {
+      const c = coflFor(s), v = volumes.get(c.id);
+      s.volume = v ? v.v : undefined;
+      s.avg3d = v && c.priceOk && v.med ? v.med : null;
+      applyThreeDay(s);
+    }
+  }
+  function wantVolumes(snipes) {
+    const now = Date.now();
+    for (const s of snipes) {
+      const c = coflFor(s), v = volumes.get(c.id);
+      if ((!v || now - v.at > VOL_TTL) && !volQueue.some(x => x.id === c.id)) volQueue.push(c);
+    }
+    pumpVolumes();
+  }
+  async function pumpVolumes() {
+    if (volBusy) return;
+    volBusy = true;
+    let since = 0;
+    while (volQueue.length) {
+      const c = volQueue.shift();
+      try {
+        const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(c.tag)}${c.q}`);
+        if (r.status === 429) { volQueue.unshift(c); await sleep(10_000); continue; }
+        const j = r.ok ? await r.json() : null;
+        volumes.set(c.id, { v: j && typeof j.volume === 'number' ? j.volume : 0, med: j && j.median || null, at: Date.now() });
+        state.volStatus = 'ok';
+      } catch {
+        // Unreachable: retry this item in about 5 minutes, show snipes unfiltered meanwhile.
+        volumes.set(c.id, { v: null, at: Date.now() - VOL_TTL + 5 * 60e3 });
+        state.volStatus = 'error';
+      }
+      if (++since >= 4 || !volQueue.length) { since = 0; annotateVolumes(); emit(); }
+      await sleep(400);
+    }
+    saveVolumes();
+    volBusy = false;
   }
 
   function emit() { listeners.forEach(f => f(state)); }

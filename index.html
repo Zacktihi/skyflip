@@ -197,6 +197,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <button class="chip" id="f-zeros" aria-pressed="false">Missing zeros only</button>
       </div>
     </div>
+    <div class="field"><label for="smin">Min sales per day</label><input id="smin" type="text" inputmode="decimal" value="10" style="width:110px;font-family:var(--f-num)"></div>
     <div class="field"><label for="beep">Alert</label>
       <label class="toggle"><input id="beep" type="checkbox"> Beep on new snipes</label>
     </div>
@@ -208,27 +209,30 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <th data-s="name">Item</th>
         <th data-s="price" class="num">Price</th>
         <th data-s="marketTotal" class="num">Market</th>
+        <th data-s="avgTotal" class="num" title="Median sale price over the last 3 days, from Coflnet">3-day price</th>
         <th data-s="profit" class="num" aria-sort="descending">Profit after tax</th>
         <th data-s="ratio">How cheap</th>
+        <th data-s="volume" class="num" title="Average sales per day, from Coflnet">Sold/day</th>
         <th data-s="start" class="num">Listed</th>
         <th data-s="refRank">Market price</th>
         <th>In game</th>
       </tr></thead>
-      <tbody id="srows"><tr><td colspan="8" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
+      <tbody id="srows"><tr><td colspan="10" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
     </table>
   </div>
 
   <div class="legend">
     <span>A snipe is a BIN listed at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
-    <span><b>Market</b> is the middle of the three cheapest listings from other sellers, capped by recent sales.</span>
+    <span><b>Market</b> is the lowest of: the middle of the three cheapest listings from other sellers, sales recorded in this browser, and the <b>3-day price</b> (the median sale over the last 3 days for the same rarity, stars or pet level, from Coflnet). A snipe has to be a third of that or less.</span>
     <span><b>Solid</b>: recent sales or three close listings back the market price. <b>Likely</b>: two other sellers list within 30% of each other. <b>Check</b>: one listing or listings that disagree (hidden by default). Always look at the item in game before buying.</span>
+    <span><b>Sold/day</b> is the item's average sales per day, from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. Items that sell less often than your minimum are hidden, since a cheap item nobody buys is hard to resell.</span>
     <span>Snipes listed more than 30 minutes ago are hidden: a real typo gets bought within minutes, so an older one usually isn't actually cheap.</span>
     <span>The page checks Hypixel every second once a refresh is due and shows new snipes from the newest page first. Hypixel only publishes new data about once a minute, and new BINs can't be bought for their first 20 seconds.</span>
   </div>
   </section>
 </div>
 
-<script src="engine.js?v=7"></script>
+<script src="engine.js?v=9"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -350,11 +354,12 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   try {
     const s = JSON.parse(localStorage.getItem('skyflip-snipes') || '{}');
     if (s.sbudget != null) $('#sbudget').value = s.sbudget;
+    if (s.smin != null) $('#smin').value = s.smin;
     sf.zeros = !!s.zeros; if (s.refs) sf.refs = new Set(s.refs); $('#beep').checked = !!s.beep;
   } catch {}
   $('#f-zeros').setAttribute('aria-pressed', sf.zeros);
   document.querySelectorAll('.chip[data-r]').forEach(b => b.setAttribute('aria-pressed', sf.refs.has(b.dataset.r)));
-  const persistS = () => { try { localStorage.setItem('skyflip-snipes', JSON.stringify({ sbudget: $('#sbudget').value, zeros: sf.zeros, refs: [...sf.refs], beep: $('#beep').checked })); } catch {} };
+  const persistS = () => { try { localStorage.setItem('skyflip-snipes', JSON.stringify({ sbudget: $('#sbudget').value, smin: $('#smin').value, zeros: sf.zeros, refs: [...sf.refs], beep: $('#beep').checked })); } catch {} };
 
   let audio;
   function beep() {
@@ -380,22 +385,33 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   function passes(s) {
     if (!s) return false;
     const q = $('#sq').value.trim().toLowerCase(), budget = parseAmt($('#sbudget').value);
-    return (!sf.zeros || s.missingZeros) && sf.refs.has(s.reference) && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q));
+    if (!((!sf.zeros || s.missingZeros) && sf.refs.has(s.reference) && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q)))) return false;
+    // Sales speed: hide items still being checked, and items that sell too rarely.
+    // If Coflnet can't be reached, show everything rather than nothing.
+    if (s.below3d) return false; // not actually cheap against the 3-day price
+    if (s.volume === undefined) return false;
+    if (s.volume === null) return true;
+    return s.volume >= (parseAmt($('#smin').value) || 0);
   }
+  const checking = () => st.snipes.filter(s => s.volume === undefined).length;
+  const fmtVol = v => v == null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
   function renderSnipes() {
     if (!st || !st.snipes) return;
-    $('#c-snipes').textContent = st.snipes.length;
     let list = st.snipes.filter(passes);
-    list.forEach(s => { s.marketTotal = s.market * s.count; s.refRank = { solid: 0, likely: 1, check: 2 }[s.reference]; });
+    $('#c-snipes').textContent = list.length;
+    const pending = checking();
+    list.forEach(s => { s.marketTotal = s.market * s.count; s.avgTotal = s.avg3d ? s.avg3d * s.count : 0; s.refRank = { solid: 0, likely: 1, check: 2 }[s.reference]; });
     list.sort((a, b) => { const x = a[sKey], y = b[sKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sDir; });
-    if (!list.length) { $('#srows').innerHTML = '<tr><td colspan="8" class="empty">No snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.</td></tr>'; return; }
+    if (!list.length) { $('#srows').innerHTML = `<tr><td colspan="10" class="empty">${pending ? `Checking how fast ${pending} candidate item${pending > 1 ? 's' : ''} sell…` : 'No fast-selling snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.'}</td></tr>`; return; }
     const now = Date.now();
     $('#srows').innerHTML = list.map(s => `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
       <td class="name"><span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num">${fmt(s.price)}</td>
-      <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sale median ' + fmt(s.histMedian * s.count) : ''}">${fmt(s.marketTotal)}</td>
+      <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
+      <td class="num">${s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
       <td class="num profit">+${fmt(s.profit)}</td>
       <td>${s.missingZeros ? `<span class="zero">Missing ${s.missingZeros} zero${s.missingZeros > 1 ? 's' : ''}</span>` : ''}<span class="below">${Math.round((1 - 1 / s.ratio) * 100)}% below</span></td>
+      <td class="num">${fmtVol(s.volume)}</td>
       <td class="num" data-age="${s.start}">${ago(s.start)}</td>
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
       <td>${copyButtons(s.uuid, s.name)}</td>
@@ -414,7 +430,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const r = b.dataset.r; sf.refs.has(r) ? sf.refs.delete(r) : sf.refs.add(r);
     b.setAttribute('aria-pressed', sf.refs.has(r)); persistS(); renderSnipes();
   }));
-  ['#sq', '#sbudget'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
+  ['#sq', '#sbudget', '#smin'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
   $('#beep').addEventListener('change', () => { persistS(); if ($('#beep').checked) beep(); });
   $('#srows').addEventListener('click', e => {
     const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
