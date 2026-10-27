@@ -291,8 +291,9 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     'FISHING_GENERATOR_12', 'CLAY_GENERATOR_12', 'GENERATOR_UPGRADE_STONE_FISHING_12', 'GENERATOR_UPGRADE_STONE_CLAY_12', 'SEAL_PERSONALITY', 'BEACH_BALL_PERSONALITY',
     'BEACH_BALL_BARN_SKIN', 'SMALL_SEAL_PLUSHIE', 'MEDIUM_SEAL_PLUSHIE', 'LARGE_SEAL_PLUSHIE', 'GIANT_SEAL_PLUSHIE', 'ENCHANTMENT_TIDAL_1', 'ENCHANTMENT_TIDAL_2', 'ENCHANTMENT_TIDAL_3'];
   const EVENTS = [
-    // Yearly themes rotate on a 12-year cycle; the first Year of the Seal was
-    // SkyBlock year 402 (February 2025) and the Year of the Pig falls 6 years apart.
+    // Each yearly theme comes around every 12 SkyBlock years and lasts the whole
+    // year. Year of the Seal: years 402 (February 2025), ..., 522, 534 (matches the
+    // in-game timer). The Year of the Pig falls 6 years apart from it.
     { name: 'Year of the Seal', items: SEAL_ITEMS, occ: y => y % 12 === 6 ? [[sbYearStart(y), sbYearStart(y + 1)]] : [] },
     { name: 'Year of the Pig', items: ['SHINY_ORB', 'SHINY_PRISM', 'SHINY_ROD', 'SHINY_RELIC', 'SHINY_SHARD', 'PIG_GENERATOR_12'], occ: y => y % 12 === 0 ? [[sbYearStart(y), sbYearStart(y + 1)]] : [] },
     { name: 'Spooky Festival', after: 864e5, items: ['GREEN_CANDY', 'PURPLE_CANDY', 'ECTOPLASM', 'PUMPKIN_GUTS', 'WEREWOLF_SKIN', 'SOUL_FRAGMENT', 'SPOOKY_SHARD', 'CANDY_TALISMAN', 'CANDY_RING', 'CANDY_ARTIFACT', 'CANDY_RELIC', 'BAT_PERSON_HELMET', 'BAT_PERSON_CHESTPLATE', 'BAT_PERSON_LEGGINGS', 'BAT_PERSON_BOOTS', 'BAT_PERSON_TALISMAN', 'BAT_PERSON_RING', 'BAT_PERSON_ARTIFACT'], occ: y => [[sbAt(y, 7, 29), sbAt(y, 8, 1)]] },
@@ -307,16 +308,20 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   const UPCOMING_WINDOW = 7 * 864e5;
   function refreshEvents() {
     const now = Date.now(), y = Math.floor((now - SB_EPOCH) / SB_YEAR) + 1;
-    const active = [], upcoming = [];
+    const active = [], upcoming = [], past = [];
     for (const ev of EVENTS) {
       const occ = [y - 1, y, y + 1].flatMap(yy => ev.occ(yy)).sort((a, b) => a[0] - b[0]);
       const cur = occ.find(([s, e]) => s <= now && now < e + (ev.after || 0));
       if (cur) active.push({ name: ev.name, items: ev.items, start: cur[0], end: cur[1], over: now >= cur[1] });
       const next = occ.find(([s]) => s > now && s - now <= UPCOMING_WINDOW && (!cur || s > cur[1]));
       if (next) upcoming.push({ name: ev.name, items: ev.items, start: next[0], end: next[1] });
+      // Most recent run that ended in the last 7 days (and isn't still shown as now).
+      const prev = occ.filter(([s, e]) => e <= now && now - e <= UPCOMING_WINDOW && (!cur || e < cur[0])).pop();
+      if (prev) past.push({ name: ev.name, items: ev.items, start: prev[0], end: prev[1] });
     }
     upcoming.sort((a, b) => a.start - b.start);
-    state.events = { active, upcoming, year: y, at: now };
+    past.sort((a, b) => b.end - a.end);
+    state.events = { active, upcoming, past, year: y, at: now };
     return state.events;
   }
   const isDerpy = () => mayor === 'Derpy';

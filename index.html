@@ -159,8 +159,11 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .spark-base{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
 .spark-dot{fill:var(--bad)}
 .dip{color:var(--bad)}
-.evstrip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;font-size:.84rem;color:var(--muted);padding:2px 2px}
-.evstrip .evlabel{font:600 .7rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;margin-right:2px}
+.evstrip{display:grid;gap:6px;font-size:.84rem;color:var(--muted);padding:2px 2px}
+.evstrip .evrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
+.evstrip .evlabel{font:600 .7rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;width:84px;flex:none}
+.evstrip .ev.past{opacity:.7}
+.evstrip .none{font-style:italic}
 .evstrip .ev{border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--surface);color:var(--ink)}
 .evstrip .ev small{color:var(--muted);font-family:var(--f-num)}
 .evstrip .ev.now{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
@@ -251,7 +254,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <span>Investments are liquid items whose price has <b>dropped well below a stable 30-day level</b>: the kind of dip that tends to come back once whatever caused it passes, such as an event flooding the market or a mayor perk ending.</span>
       <span>Each scan checks the 250 most-listed plain auction house items and the 150 most-traded bazaar items worth over 100k (Stock of Stonks is always included), using their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. The first visit takes about 4 minutes to load them all; after that they are cached for 6 hours.</span>
       <span>An item is shown when <b>today's price is 12–60% below its normal price</b> and its recent sales have dropped too, its price was steady before that, it wasn't already sliding, and it trades at least 10 a day. "Recent" means the current mayor's term so far (at least 2 days), so a drop caused by the mayor is compared with prices from before they took office. Those get a <b>mayor dip</b> tag; they often recover when the term ends.</span>
-      <span><b>Events.</b> The line above the table shows SkyBlock events happening now and in the next 7 days, worked out from the SkyBlock calendar and the current mayor's perks: Year of the Seal and Year of the Pig (they rotate every 6 SkyBlock years), Spooky Festival, Season of Jerry, New Year, Traveling Zoo, Mining Fiesta, Fishing Festival and Diana's Mythological Ritual. Items an event hands out are always checked. If one is cheap because a running event is adding supply, it gets a <b>green tag</b> with the event's name, and its price is compared with before the event started; these usually recover after the event. If an event that adds more of it starts soon, it gets an <b>orange tag</b> and is never rated Strong, since the price can drop further first.</span>
+      <span><b>Events.</b> The lines above the table show SkyBlock events from the last 7 days, happening now, and coming in the next 7 days, worked out from the SkyBlock calendar and the current mayor's perks: Year of the Seal and Year of the Pig (each comes around every 12 SkyBlock years and lasts the whole year; the Pig falls 6 years after the Seal), Spooky Festival, Season of Jerry, New Year, Traveling Zoo, Mining Fiesta, Fishing Festival and Diana's Mythological Ritual. Items an event hands out are always checked. If one is cheap because a running event is adding supply, it gets a <b>green tag</b> with the event's name, and its price is compared with before the event started; these usually recover after the event. If an event that adds more of it starts soon, it gets an <b>orange tag</b> and is never rated Strong, since the price can drop further first.</span>
       <span><b>If it recovers</b> is the normal price: the typical daily average for bazaar items, and the typical lowest daily sale for auction items (a cautious BIN price). <b>Profit</b> is that minus tax (bazaar 1.25%; auction listing fee and claim tax) and what you pay now. On the bazaar a buy order is cheaper than the instant-buy price shown, just slower. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 trades a day.</span>
       <span>Nothing here is guaranteed. A dip can also be the start of a lasting drop, for example after a game update makes an item easier to get, so check recent SkyBlock news before investing a lot.</span>
     </div>
@@ -386,7 +389,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=18"></script>
+<script src="engine.js?v=19"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -465,20 +468,20 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const lx = x(values.length - 1), ly = y(values[values.length - 1]);
     return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><line x1="2" x2="${w - 2}" y1="${y(base).toFixed(1)}" y2="${y(base).toFixed(1)}" class="spark-base"/><polyline points="${pts}" class="spark-line"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" class="spark-dot"/></svg>`;
   }
-  // "3d 4h", "5h 10m" or "12m" until a time.
-  const until = t => { const m = Math.max(0, Math.round((t - Date.now()) / 60e3)), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); return d ? `${d}d ${hh}h` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
+  // "3d 4h 1m", "5h 10m" or "12m" until a time.
+  const until = t => { const m = Math.max(0, Math.round((t - Date.now()) / 60e3)), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); return d ? `${d}d ${hh}h ${m % 60}m` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
   function renderEvents() {
-    const ev = st.events, t = st.mayorTerm, parts = [];
-    if (ev && ev.active.length) {
-      parts.push('<span class="evlabel">Now</span>');
-      for (const e of ev.active) parts.push(`<span class="ev now" title="${e.items.length ? e.items.length + ' items affected' : 'No tracked items'}">${esc(e.name)} <small>${e.over ? 'just ended' : 'ends in ' + until(e.end)}</small></span>`);
-    }
-    if (t && t.end > Date.now()) parts.push(`<span class="ev" title="Mayor-driven dips often recover when the term ends">Mayor ${esc(t.name)} <small>ends in ${until(t.end)}</small></span>`);
-    if (ev && ev.upcoming.length) {
-      parts.push('<span class="sep"></span><span class="evlabel">Coming up</span>');
-      for (const e of ev.upcoming) parts.push(`<span class="ev">${esc(e.name)} <small>in ${until(e.start)}</small></span>`);
-    }
-    $('#i-events').innerHTML = parts.join('');
+    const ev = st.events, t = st.mayorTerm;
+    if (!ev && !t) { $('#i-events').innerHTML = ''; return; }
+    const tip = e => e.items.length ? `${e.items.length} tracked items affected` : 'No tracked items';
+    const ago = e => { const m = Math.max(0, Math.round((Date.now() - e) / 60e3)), d = Math.floor(m / 1440), hh = Math.floor(m % 1440 / 60); return d ? `${d}d ${hh}h ${m % 60}m` : hh ? `${hh}h ${m % 60}m` : `${m}m`; };
+    const now = (ev ? ev.active : []).map(e => `<span class="ev now" title="${tip(e)}">${esc(e.name)} <small>${e.over ? 'ended ' + ago(e.end) + ' ago' : 'ends in ' + until(e.end)}</small></span>`);
+    if (t && t.end > Date.now()) now.push(`<span class="ev" title="Mayor-driven dips often recover when the term ends">Mayor ${esc(t.name)} <small>ends in ${until(t.end)}</small></span>`);
+    const row = (label, items, empty) => `<div class="evrow"><span class="evlabel">${label}</span>${items.length ? items.join('') : `<span class="none">${empty}</span>`}</div>`;
+    $('#i-events').innerHTML =
+      row('Past', (ev && ev.past || []).map(e => `<span class="ev past" title="${tip(e)}">${esc(e.name)} <small>ended ${ago(e.end)} ago</small></span>`), 'Nothing in the last 7 days') +
+      row('Now', now, 'No events running') +
+      row('Coming up', (ev ? ev.upcoming : []).map(e => `<span class="ev" title="${tip(e)}">${esc(e.name)} <small>in ${until(e.start)}</small></span>`), 'Nothing in the next 7 days');
   }
   function renderInvest() {
     if (!st) return;
