@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Layout: a trading desk. Status strip on top, filters, then one dense table of flips. */
+/* Layout: a trading desk. Status strip on top, filters, then one dense table per view. */
 :root{
   --bg:#f3f4f7; --surface:#ffffff; --line:#dfe2ea; --ink:#151922; --muted:#5f6778;
   --gold:#b87a0c; --gold-soft:#fbf1dc;
@@ -154,6 +154,11 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .snipe-block{display:grid;gap:8px}
 .block-title{font:700 1.05rem var(--f-display);letter-spacing:.03em;margin:4px 2px 0;display:flex;align-items:center;gap:8px}
 .block-title .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 8px}
+.spark{display:block;overflow:visible}
+.spark-line{fill:none;stroke:var(--gold);stroke-width:1.6;stroke-linejoin:round}
+.spark-base{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
+.spark-dot{fill:var(--bad)}
+.dip{color:var(--bad)}
 .pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
@@ -168,7 +173,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 <header class="topbar">
   <div class="topbar-inner">
     <nav class="tabs" aria-label="Views">
-      <a class="tab" href="#flips" data-view="flips">Flips <span class="count" id="c-flips">–</span></a>
+      <a class="tab" href="#investments" data-view="investments">Investments <span class="count" id="c-inv">–</span></a>
       <a class="tab" href="#snipes" data-view="snipes">Snipes <span class="count" id="c-snipes">–</span></a>
       <a class="tab" href="#bazaar" data-view="bazaar">Bazaar <span class="count" id="c-bazaar">–</span></a>
     </nav>
@@ -176,7 +181,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <img class="logo" src="data:image/webp;base64,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" alt="" width="44" height="44">
       <div>
         <h1>ChudHouse</h1>
-        <p class="sub">Hypixel SkyBlock auction &amp; bazaar flips</p>
+        <p class="sub">Hypixel SkyBlock investments, snipes &amp; bazaar</p>
       </div>
     </div>
     <div class="status" aria-live="polite">
@@ -191,44 +196,45 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 <div class="wrap">
   <div id="banner" class="banner" hidden></div>
 
-  <section id="v-flips" class="view">
+  <section id="v-investments" class="view">
   <div class="controls">
-    <div class="field"><label for="q">Search item</label><input id="q" type="search" placeholder="e.g. Hyperion" autocomplete="off"></div>
-    <div class="field"><label for="budget">Max buy price</label><input id="budget" type="text" inputmode="decimal" placeholder="e.g. 20m"></div>
-    <div class="field"><label for="minp">Min profit</label><input id="minp" type="text" inputmode="decimal" value="100k"></div>
-    <div class="field"><label>Show</label>
+    <div class="field"><label for="iq">Search item</label><input id="iq" type="search" placeholder="e.g. Juju" autocomplete="off"></div>
+    <div class="field"><label for="imax">Max buy price</label><input id="imax" type="text" inputmode="decimal" placeholder="e.g. 50m" style="width:130px;font-family:var(--f-num)"></div>
+    <div class="field"><label for="iup">Min upside %</label><input id="iup" type="text" inputmode="decimal" value="10" style="width:100px;font-family:var(--f-num)"></div>
+    <div class="field"><label>Confidence</label>
       <div class="chips" role="group" aria-label="Confidence filter">
-        <button class="chip" data-c="confirmed" aria-pressed="true">Confirmed</button>
-        <button class="chip" data-c="likely" aria-pressed="true">Likely</button>
-        <button class="chip" data-c="unverified" aria-pressed="true">Unverified</button>
-        <button class="chip" data-c="risky" aria-pressed="false">Risky</button>
+        <button class="chip" data-ic="strong" aria-pressed="true">Strong</button>
+        <button class="chip" data-ic="moderate" aria-pressed="true">Moderate</button>
       </div>
     </div>
+    <div class="field"><label>Price history</label><span class="toggle" id="i-progress">–</span></div>
   </div>
 
   <div class="tablebox">
     <table>
       <thead><tr>
-        <th data-k="name">Item</th>
-        <th data-k="price" class="num">Buy</th>
-        <th data-k="sell" class="num">Sell at</th>
-        <th data-k="profit" class="num" aria-sort="descending">Profit after tax</th>
-        <th data-k="margin" class="num">Margin</th>
-        <th data-k="listed" class="num">Listed</th>
-        <th data-k="confRank">Checks</th>
+        <th data-i="name">Item</th>
+        <th data-i="low" class="num" title="Cheapest Buy It Now right now">Buy now</th>
+        <th data-i="target" class="num" title="Today's cheapest BIN scaled back up to the item's normal 30-day price">If it recovers</th>
+        <th data-i="profit" class="num" aria-sort="descending">Profit after tax</th>
+        <th data-i="upside" class="num">Upside</th>
+        <th data-i="dip" class="num" title="How far the last 2 days are below the 30-day normal price">Dip</th>
+        <th>Last 30 days</th>
+        <th data-i="volume" class="num" title="Typical sales per day over the last month">Sold/day</th>
+        <th data-i="confRank">Confidence</th>
         <th>In game</th>
       </tr></thead>
-      <tbody id="rows"><tr><td colspan="8" class="empty">Loading every auction from Hypixel. The first load takes 10–20 seconds; after that it updates every minute on its own.</td></tr></tbody>
+      <tbody id="irows"><tr><td colspan="10" class="empty">Loading the auction house and 30-day price histories…</td></tr></tbody>
     </table>
   </div>
 
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
-    <span><b>S</b> Recent real sales back up the sell price</span>
-    <span><b>D</b> Another seller lists within 10% of the sell price</span>
-    <span>Sales are recorded in this browser while the page is open, so the S check fills in over time.</span>
-    <span>Fees: 1–2.5% listing fee plus 1% claim tax above 1M (4x while Derpy is mayor, detected automatically).</span>
+      <span>Investments are liquid items whose price has <b>dropped well below a stable 30-day level</b>: the kind of dip that tends to come back once whatever caused it passes, such as an event flooding the market or a mayor perk ending.</span>
+      <span>Each scan takes the 120 most-listed plain items worth over 100k and loads their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a> (cached for 6 hours). An item is shown when the last 2 days are 12–60% below its normal price on both its average and its lowest sales, its price was steady before that, it wasn't already sliding, and it sells at least 10 a day.</span>
+      <span><b>If it recovers</b> is today's cheapest BIN scaled back up to the normal price. <b>Profit</b> is that minus the listing fee and claim tax and what you pay now. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 sales a day.</span>
+      <span>Nothing here is guaranteed. A dip can also be the start of a lasting drop, for example after a game update makes an item easier to get, so check recent SkyBlock news before investing a lot.</span>
     </div>
   </details>
   </section>
@@ -361,15 +367,14 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=15"></script>
+<script src="engine.js?v=16"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
   const fmt = n => n == null ? '–' : n >= 1e9 ? (n/1e9).toFixed(2)+'B' : n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : Math.round(n).toString();
   const parseAmt = s => { const m = /^\s*([\d.]+)\s*([kmb]?)\s*$/i.exec(s||''); if (!m) return null; return +m[1] * ({k:1e3,m:1e6,b:1e9}[m[2].toLowerCase()]||1); };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const rank = {confirmed:0, likely:1, unverified:2, risky:3};
-  // Name as you'd type it in the auction house search: no stars, symbols or pet level.
+    // Name as you'd type it in the auction house search: no stars, symbols or pet level.
   const plainName = n => n.replace(/^\[Lvl \d+\]\s*/, '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
   // Base item names from Hypixel's official item list, so "Necrotic Storm's
   // Leggings ✪✪✪" copies as "Storm's Leggings": no reforge, stars or symbols.
@@ -400,57 +405,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       .catch(() => { btn.textContent = btn.dataset.cmd; });
   }
 
-  let st = null, sortKey = 'profit', sortDir = -1;
-  const open = new Set();
-  const show = new Set(['confirmed','likely','unverified']);
-
-  try {
-    const saved = JSON.parse(localStorage.getItem('skyflip') || '{}');
-    if (saved.minp != null) $('#minp').value = saved.minp;
-    if (saved.budget != null) $('#budget').value = saved.budget;
-    if (saved.show) { show.clear(); saved.show.forEach(c => show.add(c)); }
-  } catch {}
-  const persist = () => { try { localStorage.setItem('skyflip', JSON.stringify({minp:$('#minp').value, budget:$('#budget').value, show:[...show]})); } catch {} };
-  document.querySelectorAll('.chip[data-c]').forEach(b => b.setAttribute('aria-pressed', show.has(b.dataset.c)));
-
-  const label = {
-    sales: {agree:'Recent sales back up this price', disagree:'Recent sales are well below the next listing', thin:'Not enough sales recorded yet'},
-    depth: {agree:'Another seller lists close to this price', gap:'Only one listing near this price', thin:'No third seller listing this item'},
-  };
-  const cls = v => v === 'agree' ? 'agree' : (v === 'disagree' || v === 'gap') ? 'bad' : '';
-
-  function render() {
-    if (!st || !st.flips) return;
-    const q = $('#q').value.trim().toLowerCase();
-    const budget = parseAmt($('#budget').value);
-    const minp = parseAmt($('#minp').value) || 0;
-    let list = st.flips.filter(f => show.has(f.confidence) && f.profit >= minp && (!budget || f.price <= budget) && (!q || f.name.toLowerCase().includes(q)));
-    list.forEach(f => { f.confRank = rank[f.confidence]; f.sell = f.target * f.count; });
-    list.sort((a, b) => { const x = a[sortKey], y = b[sortKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sortDir; });
-    list = list.slice(0, 300);
-    if (!list.length) { $('#rows').innerHTML = '<tr><td colspan="8" class="empty">No flips match these filters right now. Try a lower minimum profit or a higher budget.</td></tr>'; return; }
-    $('#rows').innerHTML = list.map(f => {
-      const c = f.checks;
-      const row = `<tr class="row" data-u="${f.uuid}">
-        <td class="name">${icon(f.key)}<span class="r-${esc(f.tier)}">${esc(f.name)}</span>${f.count > 1 ? ` <span class="flag">x${f.count}</span>` : ''}<span class="flags">${f.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
-        <td class="num">${fmt(f.price)}</td>
-        <td class="num">${fmt(f.sell)}</td>
-        <td class="num profit">+${fmt(f.profit)}</td>
-        <td class="num">${(f.margin*100).toFixed(1)}%</td>
-        <td class="num">${f.listed}</td>
-        <td><span class="conf ${f.confidence}">${f.confidence}</span>
-          <span class="checks"><span class="ck ${cls(c.sales)}" title="${label.sales[c.sales]}">S</span><span class="ck ${cls(c.depth)}" title="${label.depth[c.depth]}">D</span></span></td>
-        <td>${copyButtons(f.uuid, f.name, f.key)}</td>
-      </tr>`;
-      const det = open.has(f.uuid) ? `<tr class="detail"><td colspan="8"><div class="dgrid">
-        <div><span>Next cheapest BIN</span><b>${fmt(f.secondBin * f.count)}</b></div>
-        <div><span>Third cheapest BIN</span><b>${f.thirdBin ? fmt(f.thirdBin * f.count) : 'none'}</b></div>
-        <div><span>Sale median (3 days)</span><b>${f.histMedian ? fmt(f.histMedian * f.count) + ' · ' + f.histN + ' sales' : 'not enough sales yet'}</b></div>
-        <div><span>Listed</span><b>${new Date(f.start).toLocaleTimeString()} · ends ${new Date(f.end).toLocaleString()}</b></div>
-      </div></td></tr>` : '';
-      return row + det;
-    }).join('');
-  }
+  let st = null;
 
   function status() {
     if (!st) return;
@@ -466,33 +421,71 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     else b.hidden = true;
   }
 
-  SkyFlipEngine.on(s => { st = s; status(); render(); });
+  SkyFlipEngine.on(s => { st = s; status(); });
   SkyFlipEngine.start();
 
-  document.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
-    const k = th.dataset.k;
-    if (sortKey === k) sortDir *= -1; else { sortKey = k; sortDir = (k === 'name' || k === 'confRank') ? 1 : -1; }
-    document.querySelectorAll('th[data-k]').forEach(t => t.removeAttribute('aria-sort'));
-    th.setAttribute('aria-sort', sortDir < 0 ? 'descending' : 'ascending');
-    render();
-  }));
-  document.querySelectorAll('.chip[data-c]').forEach(b => b.addEventListener('click', () => {
-    const c = b.dataset.c; show.has(c) ? show.delete(c) : show.add(c);
-    b.setAttribute('aria-pressed', show.has(c)); persist(); render();
-  }));
-  ['#q','#budget','#minp'].forEach(s => $(s).addEventListener('input', () => { persist(); render(); }));
-  $('#rows').addEventListener('click', e => {
-    const btn = e.target.closest('.copy');
-    if (btn) { e.stopPropagation(); copyClick(btn); return; }
-    const tr = e.target.closest('tr.row'); if (!tr) return;
-    const u = tr.dataset.u; open.has(u) ? open.delete(u) : open.add(u); render();
-  });
   setInterval(status, 1000);
+
+  // ---------- investments ----------
+  let iKey = 'profit', iDir = -1;
+  const iconf = new Set(['strong', 'moderate']);
+  try {
+    const s = JSON.parse(localStorage.getItem('chudhouse-invest') || '{}');
+    ['imax', 'iup'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
+    if (s.conf) { iconf.clear(); s.conf.forEach(c => iconf.add(c)); }
+  } catch {}
+  document.querySelectorAll('.chip[data-ic]').forEach(b => b.setAttribute('aria-pressed', iconf.has(b.dataset.ic)));
+  const persistI = () => { try { localStorage.setItem('chudhouse-invest', JSON.stringify({ imax: $('#imax').value, iup: $('#iup').value, conf: [...iconf] })); } catch {} };
+  // 30-day price line, scaled to its own range, with the normal price dashed.
+  function spark(values, base) {
+    const w = 120, h = 32, lo = Math.min(...values, base), hi = Math.max(...values, base), span = hi - lo || 1;
+    const x = i => (i / (values.length - 1)) * (w - 4) + 2, y = v => h - 3 - ((v - lo) / span) * (h - 6);
+    const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const lx = x(values.length - 1), ly = y(values[values.length - 1]);
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><line x1="2" x2="${w - 2}" y1="${y(base).toFixed(1)}" y2="${y(base).toFixed(1)}" class="spark-base"/><polyline points="${pts}" class="spark-line"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.6" class="spark-dot"/></svg>`;
+  }
+  function renderInvest() {
+    if (!st) return;
+    $('#i-progress').textContent = st.investError ? st.investError + ', retrying' : st.investTotal ? `${Math.min(st.investChecked || 0, st.investTotal)} of ${st.investTotal} items checked` : 'waiting for the auction house…';
+    if (!st.invest) return;
+    const q = $('#iq').value.trim().toLowerCase(), max = parseAmt($('#imax').value), minUp = (parseFloat($('#iup').value) || 0) / 100;
+    let list = st.invest.map(r => ({ ...r, display: copyName(r.name, r.key), confRank: r.confidence === 'strong' ? 0 : 1 }))
+      .filter(r => iconf.has(r.confidence) && r.upside >= minUp && (!max || r.low <= max) && (!q || r.display.toLowerCase().includes(q)));
+    list.sort((a, b) => { const x = iKey === 'name' ? a.display : a[iKey], y = iKey === 'name' ? b.display : b[iKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * iDir; });
+    $('#c-inv').textContent = list.length;
+    if (!list.length) { $('#irows').innerHTML = `<tr><td colspan="10" class="empty">${(st.investChecked || 0) < (st.investTotal || 1) ? 'Still loading price histories; investments appear here as they are checked.' : 'No items have dipped below a stable price right now. Prices are checked again every few minutes.'}</td></tr>`; return; }
+    $('#irows').innerHTML = list.map(r => `<tr>
+      <td class="name">${icon(r.key)}<span class="r-${esc(r.tier)}">${esc(r.display)}</span></td>
+      <td class="num">${fmt(r.low)}</td>
+      <td class="num">${fmt(r.target)}</td>
+      <td class="num profit">+${fmt(r.profit)}</td>
+      <td class="num">${(r.upside * 100).toFixed(1)}%</td>
+      <td class="num dip">−${(r.dip * 100).toFixed(0)}%</td>
+      <td>${spark(r.spark, r.baseAvg)}</td>
+      <td class="num">${Math.round(r.volume).toLocaleString()}</td>
+      <td><span class="ref ${r.confidence === 'strong' ? 'solid' : 'likely'}" title="Price varied ${(r.cv * 100).toFixed(0)}% day to day before the dip; ${r.trend >= 1 ? 'no downward drift' : 'drifted ' + ((1 - r.trend) * 100).toFixed(0) + '% lower'}">${r.confidence}</span></td>
+      <td>${copyButtons(r.lowUuid, r.name, r.key)}</td>
+    </tr>`).join('');
+  }
+  SkyFlipEngine.on(() => renderInvest());
+  document.querySelectorAll('th[data-i]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.i;
+    if (iKey === k) iDir *= -1; else { iKey = k; iDir = (k === 'name' || k === 'confRank') ? 1 : -1; }
+    document.querySelectorAll('th[data-i]').forEach(t => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', iDir < 0 ? 'descending' : 'ascending');
+    renderInvest();
+  }));
+  document.querySelectorAll('.chip[data-ic]').forEach(b => b.addEventListener('click', () => {
+    const c = b.dataset.ic; iconf.has(c) ? iconf.delete(c) : iconf.add(c); b.setAttribute('aria-pressed', iconf.has(c)); persistI(); renderInvest();
+  }));
+  ['#iq', '#imax', '#iup'].forEach(s => $(s).addEventListener('input', () => { persistI(); renderInvest(); }));
+  $('#irows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
+
 
   // ---------- views ----------
   function showView() {
-    const v = location.hash === '#snipes' ? 'snipes' : location.hash === '#bazaar' ? 'bazaar' : 'flips';
-    $('#v-flips').hidden = v !== 'flips';
+    const v = location.hash === '#snipes' ? 'snipes' : location.hash === '#bazaar' ? 'bazaar' : 'investments';
+    $('#v-investments').hidden = v !== 'investments';
     $('#v-snipes').hidden = v !== 'snipes';
     $('#v-bazaar').hidden = v !== 'bazaar';
     document.querySelectorAll('.tab').forEach(t => { if (t.dataset.view === v) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
@@ -584,7 +577,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       $(tbody).innerHTML = rows.length ? rows.map(s => snipeRow(s, now)).join('') : `<tr><td colspan="10" class="empty">${empty}</td></tr>`;
     }
   }
-  SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } if (s.flips) $('#c-flips').textContent = s.flips.length; });
+  SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } });
   document.querySelectorAll('th[data-s]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.s;
     if (sKey === k) sDir *= -1; else { sKey = k; sDir = (k === 'name' || k === 'refRank') ? 1 : -1; }

@@ -175,9 +175,19 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       if (snipe) snipes.push(snipe);
     }
 
+    // Plain items (no stars, recombobulator, pet or book variants) with their
+    // cheapest BIN and how many are listed: the pool for investment candidates.
+    const market = [];
+    for (const [key, list] of groups) {
+      if (key.includes('|') || key.startsWith('PET_') || key.startsWith('ENCHANTMENT_')) continue;
+      let low = list[0];
+      for (const l of list) if (l.unit < low.unit) low = l;
+      market.push({ key, low: low.unit, lowUuid: low.uuid, name: low.name, tier: low.tier, listed: list.length });
+    }
+
     out.sort((a, b) => b.profit - a.profit);
     snipes.sort((a, b) => b.profit - a.profit);
-    return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), bins };
+    return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), market, bins };
   }
 
   // ---------- snipes: listings priced far below the item's going rate ----------
@@ -345,8 +355,11 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins, stalePages, skippedPages,
       fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
+      market: res.market,
     });
     annotateVolumes();
+    wantHistories(res.market);
+    evaluateInvestments();
     emit();
     wantVolumes(res.snipes);
     // Sleep until just before the next expected rebuild, then poll every second.
@@ -452,6 +465,92 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     state.bazaar = rows;
     state.bazaarUpdated = j.lastUpdated;
     state.bazaarError = null;
+    emit();
+  }
+
+  // ---------- investments ----------
+  // Looks for liquid items whose price has dropped well below a stable 30-day
+  // level, without having been in a slide before the drop: the kind of dip that
+  // usually comes back (an event flooding the market, a mayor perk ending...).
+  // Daily price history comes from Coflnet (sky.coflnet.com/api/item/price/
+  // {item}/history/month): 31 days of average, min, max and volume per day.
+  // Fetched for the 120 most-listed plain items worth over 100k, paced well
+  // under Coflnet's limits, and cached in this browser for 6 hours.
+  const HIST_KEY = 'chudhouse-history-v1', HIST_TTL = 6 * 3600e3;
+  const INV_CANDIDATES = 120, INV_MIN_PRICE = 100_000;
+  const histories = new Map(); // item id -> { at, days: [[avg, min, volume], ...] oldest first }
+  try { for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(HIST_KEY) || '{}'))) if (Date.now() - v.at < HIST_TTL) histories.set(k, v); } catch {}
+  const saveHistories = () => { try { localStorage.setItem(HIST_KEY, JSON.stringify(Object.fromEntries(histories))); } catch {} };
+  const histQueue = [];
+  let histBusy = false;
+  function wantHistories(market) {
+    const picks = market.filter(m => m.low >= INV_MIN_PRICE).sort((a, b) => b.listed - a.listed).slice(0, INV_CANDIDATES);
+    state.investTotal = picks.length;
+    const now = Date.now();
+    for (const m of picks) {
+      const h = histories.get(m.key);
+      if ((!h || now - h.at > HIST_TTL) && !histQueue.includes(m.key)) histQueue.push(m.key);
+    }
+    pumpHistories();
+  }
+  async function pumpHistories() {
+    if (histBusy) return;
+    histBusy = true;
+    let since = 0;
+    while (histQueue.length) {
+      const id = histQueue.shift();
+      try {
+        const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(id)}/history/month`);
+        if (r.status === 429) { histQueue.unshift(id); await sleep(15_000); continue; }
+        const j = r.ok ? await r.json() : [];
+        histories.set(id, { at: Date.now(), days: (Array.isArray(j) ? j : []).map(d => [d.avg || 0, d.min || 0, d.volume || 0]) });
+        state.investError = null;
+      } catch {
+        state.investError = 'Coflnet could not be reached';
+        histQueue.push(id);
+        await sleep(30_000);
+      }
+      if (++since >= 5 || !histQueue.length) { since = 0; evaluateInvestments(); saveHistories(); }
+      await sleep(700);
+    }
+    histBusy = false;
+  }
+  const med = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  function evaluateInvestments() {
+    if (!state.market) return;
+    const rows = [];
+    let checked = 0;
+    for (const m of state.market) {
+      const h = histories.get(m.key);
+      if (!h) continue;
+      checked++;
+      const days = h.days.filter(d => d[2] > 0);
+      if (days.length < 20) continue;
+      const recent = days.slice(-2), base = days.slice(0, -2);
+      const vwap = ds => { const v = ds.reduce((s, d) => s + d[2], 0); return v ? ds.reduce((s, d) => s + d[0] * d[2], 0) / v : null; };
+      const recentAvg = vwap(recent), recentMin = med(recent.map(d => d[1]));
+      const baseAvg = med(base.map(d => d[0])), baseMin = med(base.map(d => d[1]));
+      if (!recentAvg || !baseAvg || !baseMin || !recentMin) continue;
+      const dip = 1 - recentAvg / baseAvg, dipMin = 1 - recentMin / baseMin;
+      // Stability of the normal price, and whether it was already sliding.
+      const mean = base.reduce((s, d) => s + d[0], 0) / base.length;
+      const cv = Math.sqrt(base.reduce((s, d) => s + (d[0] - mean) ** 2, 0) / base.length) / mean;
+      const half = base.length >> 1;
+      const trend = med(base.slice(half).map(d => d[0])) / med(base.slice(0, half).map(d => d[0]));
+      const volume = med(days.map(d => d[2]));
+      if (dip < 0.12 || dip > 0.6 || dipMin < 0.10) continue;   // a clear drop on both measures
+      if (cv > 0.3 || trend < 0.9 || volume < 10) continue;       // stable, not sliding, liquid
+      const recovery = baseAvg / recentAvg;                      // how far back up "normal" is
+      const target = m.low * recovery;
+      const profit = Math.round(net(target, isDerpy()) - m.low);
+      if (profit <= 0) continue;
+      const confidence = cv <= 0.15 && trend >= 0.97 && volume >= 50 ? 'strong' : 'moderate';
+      rows.push({ ...m, target, profit, upside: profit / m.low, dip, dipMin, cv, trend, volume, confidence,
+        spark: days.map(d => d[0]), baseAvg });
+    }
+    rows.sort((a, b) => b.profit - a.profit);
+    state.invest = rows;
+    state.investChecked = checked;
     emit();
   }
 
