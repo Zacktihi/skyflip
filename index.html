@@ -85,6 +85,7 @@ h1 + .sub{margin-top:3px}
 .field{display:grid;gap:4px}
 .field label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 input[type=search],input[type=text]{font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:100%;height:34px}
+select{font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:0 8px;height:34px}
 input[type=search]:focus,input[type=text]:focus{border-color:var(--gold);background:var(--surface)}
 #q{width:220px} #budget,#minp{width:120px;font-family:var(--f-num)}
 input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
@@ -147,6 +148,7 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .tab[aria-current="page"]{color:var(--ink);background:var(--surface);box-shadow:0 1px 2px color-mix(in srgb,var(--ink) 12%,transparent)}
 .tab .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 7px}
 .tab[aria-current="page"] .count{background:var(--gold-soft);color:var(--gold)}
+.pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
 .ref{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;border-radius:5px;padding:2px 7px}
@@ -162,12 +164,13 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <nav class="tabs" aria-label="Views">
       <a class="tab" href="#flips" data-view="flips">Flips <span class="count" id="c-flips">–</span></a>
       <a class="tab" href="#snipes" data-view="snipes">Snipes <span class="count" id="c-snipes">–</span></a>
+      <a class="tab" href="#bazaar" data-view="bazaar">Bazaar <span class="count" id="c-bazaar">–</span></a>
     </nav>
     <div class="brand">
       <img class="logo" src="data:image/webp;base64,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" alt="" width="44" height="44">
       <div>
         <h1>ChudHouse</h1>
-        <p class="sub">Hypixel SkyBlock auction flips &amp; snipes</p>
+        <p class="sub">Hypixel SkyBlock auction &amp; bazaar flips</p>
       </div>
     </div>
     <div class="status" aria-live="polite">
@@ -272,9 +275,54 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     </div>
   </details>
   </section>
+
+  <section id="v-bazaar" class="view" hidden>
+  <div class="controls">
+    <div class="field"><label for="bq">Search item</label><input id="bq" type="search" placeholder="e.g. Enchanted Diamond" autocomplete="off"></div>
+    <div class="field"><label for="bmax">Max price per item</label><input id="bmax" type="text" inputmode="decimal" placeholder="e.g. 50k" style="width:130px;font-family:var(--f-num)"></div>
+    <div class="field"><label for="bvol">Min traded per day</label><input id="bvol" type="text" inputmode="decimal" value="1k" style="width:120px;font-family:var(--f-num)"></div>
+    <div class="field"><label for="bmargin">Min margin %</label><input id="bmargin" type="text" inputmode="decimal" value="2" style="width:100px;font-family:var(--f-num)"></div>
+    <div class="field"><label for="btax">Your bazaar tax</label>
+      <select id="btax">
+        <option value="0.0125">1.25% (default)</option>
+        <option value="0.01125">1.125% (free upgrade)</option>
+        <option value="0.01">1% (paid upgrade)</option>
+      </select>
+    </div>
+    <div class="field"><label>Updated</label><span class="toggle" id="b-age">–</span></div>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th data-b="name">Item</th>
+        <th data-b="buyAt" class="num" title="Place a buy order here: 0.1 above the current highest buy order">Buy order at</th>
+        <th data-b="sellAt" class="num" title="Place a sell offer here: 0.1 below the current lowest sell offer">Sell offer at</th>
+        <th data-b="profit" class="num">Profit / item</th>
+        <th data-b="margin" class="num">Margin</th>
+        <th data-b="daily" class="num" title="The slower side: items instantly sold into buy orders, or instantly bought from sell offers, per day">Traded / day</th>
+        <th data-b="competition" class="num" title="Number of buy orders / sell offers already on the book">Orders</th>
+        <th data-b="potential" class="num" aria-sort="descending" title="Profit per item × traded per day × 10%: what you'd make filling a tenth of the daily flow">Profit / day (10%)</th>
+        <th>In game</th>
+      </tr></thead>
+      <tbody id="brows"><tr><td colspan="9" class="empty">Loading the bazaar from Hypixel…</td></tr></tbody>
+    </table>
+  </div>
+
+  <details class="notes">
+    <summary>How these numbers work</summary>
+    <div class="legend">
+      <span>Bazaar flipping: place a <b>buy order</b> just above the highest one, and once it fills, a <b>sell offer</b> just below the lowest one. You earn the gap minus the bazaar tax, which is only charged when you sell.</span>
+      <span><b>Profit / item</b> = sell offer price × (1 − tax) − buy order price. <b>Margin</b> is that profit as a share of what you pay.</span>
+      <span><b>Traded / day</b> is the slower of the two sides over the last 7 days: how many items people instantly sold into buy orders, and how many they instantly bought from sell offers. Both your orders need that flow to fill.</span>
+      <span><b>Profit / day (10%)</b> assumes you fill a tenth of that daily flow. It's a way to rank items by realistic size, not a promise: other flippers compete for the same orders (see <b>Orders</b>).</span>
+      <span>Very wide gaps on thinly traded items are often manipulated, so check the item's price history in game before committing a lot of coins. Data comes straight from Hypixel and refreshes about every 20 seconds.</span>
+    </div>
+  </details>
+  </section>
 </div>
 
-<script src="engine.js?v=11"></script>
+<script src="engine.js?v=12"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -396,9 +444,10 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 
   // ---------- views ----------
   function showView() {
-    const v = location.hash === '#snipes' ? 'snipes' : 'flips';
+    const v = location.hash === '#snipes' ? 'snipes' : location.hash === '#bazaar' ? 'bazaar' : 'flips';
     $('#v-flips').hidden = v !== 'flips';
     $('#v-snipes').hidden = v !== 'snipes';
+    $('#v-bazaar').hidden = v !== 'bazaar';
     document.querySelectorAll('.tab').forEach(t => { if (t.dataset.view === v) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   }
   window.addEventListener('hashchange', showView);
@@ -443,15 +492,15 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     if (!s) return false;
     const q = $('#sq').value.trim().toLowerCase(), budget = parseAmt($('#sbudget').value);
     if (!((!sf.zeros || s.missingZeros) && sf.refs.has(s.reference) && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q)))) return false;
-    // Sales speed: hide items still being checked, and items that sell too rarely.
-    // If Coflnet can't be reached, show everything rather than nothing.
+    // Snipes show the moment they're found, marked "checking", and drop off if the
+    // sales-speed or 3-day price check then fails. If Coflnet can't be reached,
+    // they stay, marked "?".
     if (s.below3d) return false; // not actually cheap against the 3-day price
-    if (s.volume === undefined) return false;
-    if (s.volume === null) return true;
+    if (s.volume === undefined || s.volume === null) return true;
     return s.volume >= (parseAmt($('#smin').value) || 0);
   }
   const checking = () => st.snipes.filter(s => s.volume === undefined).length;
-  const fmtVol = v => v == null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
+  const fmtVol = v => v === undefined ? '<span class="pending">checking…</span>' : v === null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
   function renderSnipes() {
     if (!st || !st.snipes) return;
     let list = st.snipes.filter(passes);
@@ -465,7 +514,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td class="name"><span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num">${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
-      <td class="num">${s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
+      <td class="num">${s.volume === undefined ? '<span class="pending">checking…</span>' : s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
       <td class="num profit">+${fmt(s.profit)}</td>
       <td>${s.missingZeros ? `<span class="zero">Missing ${s.missingZeros} zero${s.missingZeros > 1 ? 's' : ''}</span>` : ''}<span class="below">${Math.round((1 - 1 / s.ratio) * 100)}% below</span></td>
       <td class="num">${fmtVol(s.volume)}</td>
@@ -493,6 +542,69 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
   });
   setInterval(() => document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age)), 1000);
+
+  // ---------- bazaar ----------
+  let bKey = 'potential', bDir = -1, bState = null;
+  try {
+    const s = JSON.parse(localStorage.getItem('chudhouse-bazaar') || '{}');
+    ['bmax', 'bvol', 'bmargin', 'btax'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
+  } catch {}
+  const persistB = () => { try { localStorage.setItem('chudhouse-bazaar', JSON.stringify(Object.fromEntries(['bmax', 'bvol', 'bmargin', 'btax'].map(k => [k, $('#' + k).value])))); } catch {} };
+  const prettyId = id => id.replace(/^ENCHANTMENT_/, '').split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+  const bzName = id => baseNames[id] || (id.startsWith('ENCHANTMENT_') ? prettyId(id) + ' (book)' : prettyId(id));
+  const fmtCoins = n => n == null ? '–' : n < 100000 ? n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : fmt(n);
+  function renderBazaar() {
+    if (!bState || !bState.bazaar) return;
+    const tax = +$('#btax').value || 0.0125;
+    const q = $('#bq').value.trim().toLowerCase();
+    const max = parseAmt($('#bmax').value);
+    const minVol = parseAmt($('#bvol').value) || 0;
+    const minMargin = (parseFloat($('#bmargin').value) || 0) / 100;
+    let list = [];
+    for (const r of bState.bazaar) {
+      const buyAt = r.bid + 0.1, sellAt = r.ask - 0.1;
+      if (sellAt <= buyAt) continue;
+      const profit = sellAt * (1 - tax) - buyAt;
+      if (profit <= 0) continue;
+      const daily = Math.min(r.instaSoldWeek, r.instaBoughtWeek) / 7;
+      const row = { ...r, name: bzName(r.id), buyAt, sellAt, profit, margin: profit / buyAt, daily,
+        competition: r.buyOrders + r.sellOrders, potential: profit * daily * 0.1 };
+      if (row.margin < minMargin || daily < minVol || (max && buyAt > max)) continue;
+      if (q && !row.name.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q)) continue;
+      list.push(row);
+    }
+    $('#c-bazaar').textContent = list.length;
+    list.sort((a, b) => { const x = a[bKey], y = b[bKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * bDir; });
+    list = list.slice(0, 300);
+    if (!list.length) { $('#brows').innerHTML = '<tr><td colspan="9" class="empty">No bazaar items match these filters. Try a lower minimum margin or volume.</td></tr>'; return; }
+    $('#brows').innerHTML = list.map(r => `<tr>
+      <td class="name">${esc(r.name)}</td>
+      <td class="num">${fmtCoins(r.buyAt)}</td>
+      <td class="num">${fmtCoins(r.sellAt)}</td>
+      <td class="num profit">+${fmtCoins(r.profit)}</td>
+      <td class="num">${(r.margin * 100).toFixed(1)}%</td>
+      <td class="num">${fmt(r.daily)}</td>
+      <td class="num" title="${r.buyOrders} buy orders / ${r.sellOrders} sell offers">${r.buyOrders} / ${r.sellOrders}</td>
+      <td class="num profit">+${fmt(r.potential)}</td>
+      <td><span class="copies"><button class="copy" data-cmd="${esc(r.name.replace(/ \(book\)$/, ''))}" data-label="Copy name" title="Copy the item name for the bazaar search">Copy name</button></span></td>
+    </tr>`).join('');
+  }
+  function bazaarAge() {
+    if (!bState) return;
+    $('#b-age').textContent = bState.bazaarError ? 'Could not reach Hypixel' : bState.bazaarUpdated ? Math.round((Date.now() - bState.bazaarUpdated) / 1000) + 's ago' : '–';
+  }
+  SkyFlipEngine.on(s => { if (s.bazaar && s.bazaar !== (bState && bState.lastRows)) { bState = { bazaar: s.bazaar, bazaarUpdated: s.bazaarUpdated, bazaarError: s.bazaarError, lastRows: s.bazaar }; renderBazaar(); bazaarAge(); } });
+  document.querySelectorAll('th[data-b]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.b;
+    if (bKey === k) bDir *= -1; else { bKey = k; bDir = k === 'name' ? 1 : -1; }
+    document.querySelectorAll('th[data-b]').forEach(t => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', bDir < 0 ? 'descending' : 'ascending');
+    renderBazaar();
+  }));
+  ['#bq', '#bmax', '#bvol', '#bmargin'].forEach(s => $(s).addEventListener('input', () => { persistB(); renderBazaar(); }));
+  $('#btax').addEventListener('change', () => { persistB(); renderBazaar(); });
+  $('#brows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
+  setInterval(bazaarAge, 1000);
 })();
 </script>
 </body>

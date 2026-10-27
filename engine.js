@@ -336,7 +336,8 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   }
   function wantVolumes(snipes) {
     const now = Date.now();
-    for (const s of snipes) {
+    // Newest listings first: those are the ones worth acting on quickly.
+    for (const s of [...snipes].sort((a, b) => b.start - a.start)) {
       const c = coflFor(s), v = volumes.get(c.id);
       if ((!v || now - v.at > VOL_TTL) && !volQueue.some(x => x.id === c.id)) volQueue.push(c);
     }
@@ -366,12 +367,39 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     volBusy = false;
   }
 
+  // ---------- bazaar ----------
+  // Hypixel's bazaar endpoint (no key needed) lists every product's order book.
+  // For order flipping we need the top of each side:
+  //   sell_summary[0] = the highest buy order  (you outbid it by 0.1 to buy)
+  //   buy_summary[0]  = the lowest sell offer  (you undercut it by 0.1 to sell)
+  // and how much trades: sellMovingWeek = items instantly sold into buy orders,
+  // buyMovingWeek = items instantly bought from sell offers (last 7 days).
+  // It refreshes about every 20 seconds, independently of the auction loop.
+  async function bazaarCycle() {
+    const j = await getJSON(`${API}/bazaar`);
+    const rows = [];
+    for (const p of Object.values(j.products || {})) {
+      const bid = p.sell_summary && p.sell_summary[0], ask = p.buy_summary && p.buy_summary[0], q = p.quick_status || {};
+      if (!bid || !ask) continue;
+      rows.push({
+        id: p.product_id, bid: bid.pricePerUnit, ask: ask.pricePerUnit,
+        buyOrders: q.buyOrders || 0, sellOrders: q.sellOrders || 0,
+        instaSoldWeek: q.sellMovingWeek || 0, instaBoughtWeek: q.buyMovingWeek || 0,
+      });
+    }
+    state.bazaar = rows;
+    state.bazaarUpdated = j.lastUpdated;
+    state.bazaarError = null;
+    emit();
+  }
+
   function emit() { listeners.forEach(f => f(state)); }
 
   window.SkyFlipEngine = {
     start() {
       startWorker();
       (async () => { for (;;) { try { await cycle(); } catch (e) { state.error = e.message; emit(); await sleep(5000); } } })();
+      (async () => { for (;;) { try { await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
     },
     on(f) { listeners.push(f); },
   };
