@@ -159,7 +159,9 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
   // A listing qualifies when it costs a third of that or less. When the gap is
   // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
   const SNIPE_RATIO = 3;
+  const SNIPE_MAX_AGE = 30 * 60e3; // a real typo gets bought within minutes; older ones usually aren't cheap
   function findSnipe(low, others, histMedian, histN, derpy) {
+    if (Date.now() - low.start > SNIPE_MAX_AGE) return null;
     const sellers = new Set(), refs = [];
     for (const l of others) {
       if (sellers.has(l.seller)) continue;
@@ -191,8 +193,10 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
   }
 
   // ---------- update loop ----------
-  // Hypixel rebuilds the list about once a minute. Wait until just after the next
-  // expected rebuild, poll page 0 until it changes, then fetch every page at once.
+  // Hypixel rebuilds the list about once a minute. Shortly before the next expected
+  // rebuild, poll page 0 every second until it changes. Then fetch every page at once,
+  // and while those load, show snipes from page 0 straight away (it holds the newest
+  // listings), compared against the previous full scan.
   let lastUpdated = 0, raw = [];
   // Derpy quadruples the claim tax, so read the current mayor from Hypixel every 10 minutes.
   let mayor = null, mayorAt = 0;
@@ -212,13 +216,24 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
         state.error = null;
         if (first.lastUpdated !== lastUpdated) break;
       } catch (e) { state.error = e.message; emit(); }
-      await new Promise(r => setTimeout(r, 2500));
+      await new Promise(r => setTimeout(r, 1000));
     }
     const t0 = performance.now();
-    state.status = 'fetching'; emit();
     const pageReqs = [];
     for (let p = 1; p < first.totalPages; p++) pageReqs.push(getJSON(`${API}/auctions?page=${p}`).catch(() => null));
-    const [pages, ended] = await Promise.all([Promise.all(pageReqs), getJSON(`${API}/auctions_ended`).catch(() => ({ auctions: [] }))]);
+    const endedReq = getJSON(`${API}/auctions_ended`).catch(() => ({ auctions: [] }));
+
+    // Fast path: snipes from page 0 before the rest arrives.
+    if (raw.length) {
+      const fresh = first.auctions.filter(a => a.bin && !described.has(a.uuid)).map(a => [a.uuid, a.item_bytes, a.item_name]);
+      for (const [id, d] of await decode(fresh)) described.set(id, d);
+      const onPage0 = new Set(first.auctions.map(a => a.uuid));
+      const quick = computeFlips(first.auctions.concat(raw.filter(a => !onPage0.has(a.uuid))), isDerpy());
+      Object.assign(state, { snipes: quick.snipes, lastUpdated: first.lastUpdated, quickMs: performance.now() - t0 });
+      emit();
+    } else { state.status = 'fetching'; emit(); }
+
+    const [pages, ended] = await Promise.all([Promise.all(pageReqs), endedReq]);
     const auctions = first.auctions.concat(...pages.filter(p => p && p.lastUpdated === first.lastUpdated).map(p => p.auctions));
     const fetchMs = performance.now() - t0;
 
@@ -241,8 +256,8 @@ onmessage=e=>{const out=e.data.items.map(([id,b64,name])=>[id,describe(b64,name)
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
     });
     emit();
-    const wait = first.lastUpdated + 62_000 - Date.now();
-    await new Promise(r => setTimeout(r, Math.max(1000, Math.min(wait, 60_000))));
+    const wait = first.lastUpdated + 57_000 - Date.now();
+    await new Promise(r => setTimeout(r, Math.max(500, Math.min(wait, 60_000))));
   }
 
   function emit() { listeners.forEach(f => f(state)); }

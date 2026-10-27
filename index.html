@@ -96,6 +96,7 @@ tbody tr.row:hover{background:color-mix(in srgb,var(--gold-soft) 60%,transparent
 
 .copy{font:600 .78rem var(--f-num);border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:4px 8px;cursor:pointer}
 .copy:hover{border-color:var(--gold);color:var(--gold)}
+.copies{display:inline-flex;gap:6px}
 tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 24px}
 .dgrid div{display:grid;gap:2px;min-width:0}
@@ -221,7 +222,8 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     <span>A snipe is a BIN listed at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
     <span><b>Market</b> is the middle of the three cheapest listings from other sellers, capped by recent sales.</span>
     <span><b>Solid</b>: recent sales or three close listings back the market price. <b>Likely</b>: two other sellers list within 30% of each other. <b>Check</b>: one listing or listings that disagree (hidden by default). Always look at the item in game before buying.</span>
-    <span>Snipes go fast and Hypixel's data is up to a minute old, so some will already be sold. New BINs can't be bought for their first 20 seconds.</span>
+    <span>Snipes listed more than 30 minutes ago are hidden: a real typo gets bought within minutes, so an older one usually isn't actually cheap.</span>
+    <span>The page checks Hypixel every second once a refresh is due and shows new snipes from the newest page first. Hypixel only publishes new data about once a minute, and new BINs can't be bought for their first 20 seconds.</span>
   </div>
   </section>
 </div>
@@ -234,6 +236,13 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const parseAmt = s => { const m = /^\s*([\d.]+)\s*([kmb]?)\s*$/i.exec(s||''); if (!m) return null; return +m[1] * ({k:1e3,m:1e6,b:1e9}[m[2].toLowerCase()]||1); };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const rank = {confirmed:0, likely:1, unverified:2, risky:3};
+  // Name as you'd type it in the auction house search: no stars, symbols or pet level.
+  const plainName = n => n.replace(/^\[Lvl \d+\]\s*/, '').replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+  const copyButtons = (uuid, name) => `<span class="copies"><button class="copy" data-cmd="/viewauction ${uuid}" data-label="Copy /viewauction" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button><button class="copy" data-cmd="${esc(plainName(name))}" data-label="Copy name" title="Copy the item name for the auction house search">Copy name</button></span>`;
+  function copyClick(btn) {
+    navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = btn.dataset.label, 1200); })
+      .catch(() => { btn.textContent = btn.dataset.cmd; });
+  }
 
   let st = null, sortKey = 'profit', sortDir = -1;
   const open = new Set();
@@ -275,7 +284,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <td class="num">${f.listed}</td>
         <td><span class="conf ${f.confidence}">${f.confidence}</span>
           <span class="checks"><span class="ck ${cls(c.sales)}" title="${label.sales[c.sales]}">S</span><span class="ck ${cls(c.depth)}" title="${label.depth[c.depth]}">D</span></span></td>
-        <td><button class="copy" data-cmd="/viewauction ${f.uuid}" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button></td>
+        <td>${copyButtons(f.uuid, f.name)}</td>
       </tr>`;
       const det = open.has(f.uuid) ? `<tr class="detail"><td colspan="8"><div class="dgrid">
         <div><span>Next cheapest BIN</span><b>${fmt(f.secondBin * f.count)}</b></div>
@@ -318,12 +327,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   ['#q','#budget','#minp'].forEach(s => $(s).addEventListener('input', () => { persist(); render(); }));
   $('#rows').addEventListener('click', e => {
     const btn = e.target.closest('.copy');
-    if (btn) {
-      e.stopPropagation();
-      navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy /viewauction', 1200); })
-        .catch(() => { btn.textContent = btn.dataset.cmd; });
-      return;
-    }
+    if (btn) { e.stopPropagation(); copyClick(btn); return; }
     const tr = e.target.closest('tr.row'); if (!tr) return;
     const u = tr.dataset.u; open.has(u) ? open.delete(u) : open.add(u); render();
   });
@@ -394,7 +398,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td>${s.missingZeros ? `<span class="zero">Missing ${s.missingZeros} zero${s.missingZeros > 1 ? 's' : ''}</span>` : ''}<span class="below">${Math.round((1 - 1 / s.ratio) * 100)}% below</span></td>
       <td class="num" data-age="${s.start}">${ago(s.start)}</td>
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
-      <td><button class="copy" data-cmd="/viewauction ${s.uuid}" title="Copy the command, then paste it in Hypixel chat">Copy /viewauction</button></td>
+      <td>${copyButtons(s.uuid, s.name)}</td>
     </tr>`).join('');
   }
   SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } if (s.flips) $('#c-flips').textContent = s.flips.length; });
@@ -413,9 +417,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   ['#sq', '#sbudget'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
   $('#beep').addEventListener('change', () => { persistS(); if ($('#beep').checked) beep(); });
   $('#srows').addEventListener('click', e => {
-    const btn = e.target.closest('.copy'); if (!btn) return;
-    navigator.clipboard.writeText(btn.dataset.cmd).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy /viewauction', 1200); })
-      .catch(() => { btn.textContent = btn.dataset.cmd; });
+    const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
   });
   setInterval(() => document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age)), 1000);
 })();
