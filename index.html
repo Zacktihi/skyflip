@@ -151,6 +151,9 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .icon{width:24px;height:24px;object-fit:contain;image-rendering:pixelated;vertical-align:-7px;margin-right:9px;flex:none}
 .tag-auction{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,var(--line))}
 .ends{color:var(--warn)}
+.snipe-block{display:grid;gap:8px}
+.block-title{font:700 1.05rem var(--f-display);letter-spacing:.03em;margin:4px 2px 0;display:flex;align-items:center;gap:8px}
+.block-title .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 8px}
 .pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
@@ -250,7 +253,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     </div>
   </div>
 
-  <div class="tablebox">
+  <div class="snipe-block" id="blk-bin">
+    <h2 class="block-title">BIN snipes <span class="count" id="c-sbin">–</span></h2>
+    <div class="tablebox">
     <table>
       <thead><tr>
         <th data-s="name">Item</th>
@@ -264,13 +269,35 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
         <th data-s="refRank">Market price</th>
         <th>In game</th>
       </tr></thead>
-      <tbody id="srows"><tr><td colspan="10" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
+      <tbody id="srows" class="snipe-rows"><tr><td colspan="10" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
     </table>
+    </div>
+  </div>
+  <div class="snipe-block" id="blk-auction">
+    <h2 class="block-title">Ending auctions <span class="count" id="c-sauc">–</span></h2>
+    <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th data-s="name">Item</th>
+        <th data-s="price" class="num">Next bid</th>
+        <th data-s="marketTotal" class="num">Market</th>
+        <th data-s="avgTotal" class="num" title="Median sale price over the last 3 days, from Coflnet">3-day price</th>
+        <th data-s="profit" class="num" aria-sort="descending">Profit after tax</th>
+        <th data-s="ratio">How cheap</th>
+        <th data-s="volume" class="num" title="Average sales per day, from Coflnet">Sold/day</th>
+        <th data-s="end" class="num">Ends</th>
+        <th data-s="refRank">Market price</th>
+        <th>In game</th>
+      </tr></thead>
+      <tbody id="srows-auc" class="snipe-rows"><tr><td colspan="10" class="empty">Loading every auction from Hypixel…</td></tr></tbody>
+    </table>
+    </div>
   </div>
 
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
+    <span>Only snipes that make <b>more than 250k profit after tax</b> are shown. With both buttons on, BIN snipes are listed first and ending auctions in their own table underneath.</span>
     <span><b>Two kinds of snipe.</b> <b>BIN</b>: a Buy It Now listing at a third of the market price or less. <b>Ending auctions</b> (tagged <i>auction</i>): a bid auction ending within 5 minutes whose next bid (about 15% above the current one) is two-thirds of the market price or less. Other players can still outbid you, and Hypixel's data is up to a minute old, so check the current bid in game.</span>
     <span>The scan reads auction pages from both ends inward and shows snipes from the first pages as soon as they arrive. A page that takes more than 5 seconds is skipped for that update so the rest isn't held up.</span>
     <span>A BIN snipe is a listing at a third of the market price or less. <b>Missing zero</b> means the gap is about 10x, 100x or 1000x, the usual sign of a typo.</span>
@@ -330,7 +357,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=14"></script>
+<script src="engine.js?v=15"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -508,6 +535,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   function passes(s) {
     if (!s) return false;
     if (!sf.types.has(s.type || 'bin')) return false;
+    if (!(s.profit > 250_000)) return false; // only snipes worth more than 250k after tax
     const q = $('#sq').value.trim().toLowerCase(), budget = parseAmt($('#sbudget').value);
     if (!((!sf.zeros || s.missingZeros) && sf.refs.has(s.reference) && (!budget || s.price <= budget) && (!q || s.name.toLowerCase().includes(q)))) return false;
     // Snipes show the moment they're found, marked "checking", and drop off if the
@@ -519,17 +547,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }
   const checking = () => st.snipes.filter(s => s.volume === undefined).length;
   const fmtVol = v => v === undefined ? '<span class="pending">checking…</span>' : v === null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
-  function renderSnipes() {
-    if (!st || !st.snipes) return;
-    let list = st.snipes.filter(passes);
-    $('#c-snipes').textContent = list.length;
-    const pending = checking();
-    list.forEach(s => { s.marketTotal = s.market * s.count; s.avgTotal = s.avg3d ? s.avg3d * s.count : 0; s.refRank = { solid: 0, likely: 1, check: 2 }[s.reference]; });
-    list.sort((a, b) => { const x = a[sKey], y = b[sKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sDir; });
-    if (!list.length) { $('#srows').innerHTML = `<tr><td colspan="10" class="empty">${pending ? `Checking how fast ${pending} candidate item${pending > 1 ? 's' : ''} sell…` : 'No fast-selling snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.'}</td></tr>`; return; }
-    const now = Date.now();
-    $('#srows').innerHTML = list.map(s => `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
-      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.type === 'auction' ? ' <span class="flag tag-auction">auction</span>' : ''}${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+  function snipeRow(s, now) {
+    return `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
+      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num"${s.type === 'auction' ? ` title="Next bid: about 15% above the current bid${s.bids ? ' (' + s.bids + ' bids so far)' : ' (no bids yet, so the starting bid)'}"` : ''}>${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
       <td class="num">${s.volume === undefined ? '<span class="pending">checking…</span>' : s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
@@ -539,14 +559,32 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       ${s.type === 'auction' ? `<td class="num ends" data-end="${s.end}">${endsIn(s.end)}</td>` : `<td class="num" data-age="${s.start}">${ago(s.start)}</td>`}
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
       <td>${copyButtons(s.uuid, s.name, s.key)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }
+  function renderSnipes() {
+    if (!st || !st.snipes) return;
+    const list = st.snipes.filter(passes);
+    list.forEach(s => { s.marketTotal = s.market * s.count; s.avgTotal = s.avg3d ? s.avg3d * s.count : 0; s.refRank = { solid: 0, likely: 1, check: 2 }[s.reference]; });
+    list.sort((a, b) => { const x = a[sKey], y = b[sKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sDir; });
+    $('#c-snipes').textContent = list.length;
+    const now = Date.now();
+    // Two stacked tables: BIN snipes on top, ending auctions below. Each only
+    // shows when its button is switched on.
+    for (const [type, tbody, count, block, empty] of [
+      ['bin', '#srows', '#c-sbin', '#blk-bin', 'No fast-selling BIN snipes right now. Mispriced listings are rare and get bought quickly; this list updates every minute.'],
+      ['auction', '#srows-auc', '#c-sauc', '#blk-auction', 'No ending auctions worth sniping right now. This list updates every minute.'],
+    ]) {
+      $(block).hidden = !sf.types.has(type);
+      const rows = list.filter(s => (s.type || 'bin') === type);
+      $(count).textContent = rows.length;
+      $(tbody).innerHTML = rows.length ? rows.map(s => snipeRow(s, now)).join('') : `<tr><td colspan="10" class="empty">${empty}</td></tr>`;
+    }
   }
   SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } if (s.flips) $('#c-flips').textContent = s.flips.length; });
   document.querySelectorAll('th[data-s]').forEach(th => th.addEventListener('click', () => {
     const k = th.dataset.s;
     if (sKey === k) sDir *= -1; else { sKey = k; sDir = (k === 'name' || k === 'refRank') ? 1 : -1; }
-    document.querySelectorAll('th[data-s]').forEach(t => t.removeAttribute('aria-sort'));
-    th.setAttribute('aria-sort', sDir < 0 ? 'descending' : 'ascending');
+    document.querySelectorAll('th[data-s]').forEach(t => { if (t.dataset.s === k || (k === 'start' && t.dataset.s === 'end') || (k === 'end' && t.dataset.s === 'start')) t.setAttribute('aria-sort', sDir < 0 ? 'descending' : 'ascending'); else t.removeAttribute('aria-sort'); });
     renderSnipes();
   }));
   document.querySelectorAll('.chip[data-t]').forEach(b => {
@@ -560,9 +598,9 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }));
   ['#sq', '#sbudget', '#smin'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
   $('#beep').addEventListener('change', () => { persistS(); if ($('#beep').checked) beep(); });
-  $('#srows').addEventListener('click', e => {
+  document.querySelectorAll('.snipe-rows').forEach(tb => tb.addEventListener('click', e => {
     const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
-  });
+  }));
   setInterval(() => {
     document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age));
     document.querySelectorAll('[data-end]').forEach(td => td.textContent = endsIn(+td.dataset.end));

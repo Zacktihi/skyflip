@@ -186,6 +186,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // A listing qualifies when it costs a third of that or less. When the gap is
   // close to 10x, 100x or 1000x, it's labelled as a likely missing zero.
   const SNIPE_RATIO = 3;
+  const SNIPE_MIN_PROFIT = 250_000; // a snipe must clear more than this after tax
   // Bid auctions: look at ones ending within 5 minutes (earlier than that they
   // nearly always get bid up to the item's value). The next bid has to beat
   // the current one by about 15%, and a snipe needs the item to be worth at
@@ -205,7 +206,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     s.profit = Math.round(net(s.market * s.count, isDerpy()) - s.price);
     s.margin = s.profit / s.price;
     s.missingZeros = s.type === 'auction' ? 0 : zerosFor(s.ratio);
-    s.below3d = !!s.avg3d && (s.ratio < (s.minRatio || SNIPE_RATIO) || s.profit < 100_000);
+    s.below3d = !!s.avg3d && (s.ratio < (s.minRatio || SNIPE_RATIO) || s.profit <= SNIPE_MIN_PROFIT);
     s.reference = s.avg3d && Math.abs(s.avg3d - s.listMedian) / s.listMedian <= 0.25 ? 'solid' : s.baseReference;
   }
   const SNIPE_MAX_AGE = 30 * 60e3; // a real typo gets bought within minutes; older ones usually aren't cheap
@@ -223,7 +224,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     const ratio = market / low.unit;
     if (ratio < minRatio) return null;
     const profit = Math.round(net(market * low.count, derpy) - low.price);
-    if (profit < 100_000) return null;
+    if (profit <= SNIPE_MIN_PROFIT) return null;
 
     const missingZeros = type === 'bin' ? zerosFor(ratio) : 0;
 
