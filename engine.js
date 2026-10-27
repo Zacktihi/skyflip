@@ -185,9 +185,17 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       market.push({ key, low: low.unit, lowUuid: low.uuid, name: low.name, tier: low.tier, listed: list.length });
     }
 
+    // Every item's two cheapest BINs and listing count, for the item tooltips.
+    const lows = new Map();
+    for (const [key, list] of groups) {
+      let a = Infinity, b = Infinity, uuid = null;
+      for (const l of list) { if (l.unit < a) { b = a; a = l.unit; uuid = l.uuid; } else if (l.unit < b) b = l.unit; }
+      lows.set(key, { low: a, second: b < Infinity ? b : null, n: list.length, uuid });
+    }
+
     out.sort((a, b) => b.profit - a.profit);
     snipes.sort((a, b) => b.profit - a.profit);
-    return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), market, bins };
+    return { flips: out.slice(0, 800), snipes: snipes.slice(0, 300), market, bins, lows };
   }
 
   // ---------- snipes: listings priced far below the item's going rate ----------
@@ -416,7 +424,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins, stalePages, skippedPages,
       fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
-      market: res.market,
+      market: res.market, lows: res.lows,
     });
     annotateVolumes();
     wantHistories();
@@ -694,6 +702,52 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     emit();
   }
 
+  // ---------- item tooltips ----------
+  // Everything known about one item: live price, Coflnet sales and 30-day
+  // history, ChudHouse's own recordings, investment verdict and events.
+  const variantHist = new Map(); // coflnet id with filters -> { at, days }
+  function itemInfo(key, kind, tier) {
+    const plain = key.split('|')[0], isBz = kind === 'bazaar';
+    const c = coflFor({ key, tier: isBz ? '' : tier });
+    const plainLike = isBz || !c.q;
+    const bz = isBz ? (state.bazaar || []).find(r => r.id === key) : null;
+    const S = own.summary, ownPts = S ? (isBz ? S.bz[key] : S.ah[key]) : null;
+    const ev = state.events || { active: [], upcoming: [] };
+    return {
+      key, kind, plain,
+      live: isBz ? (bz ? { ask: bz.ask, bid: bz.bid, daily: (bz.instaSoldWeek + bz.instaBoughtWeek) / 7, buyOrders: bz.buyOrders, sellOrders: bz.sellOrders } : null)
+                 : (state.lows && state.lows.get(key)) || null,
+      sales: volumes.get(c.id) || null,
+      hist: plainLike ? histories.get(plain) || null : variantHist.get(c.id) || null,
+      own: ownPts ? { start: S.start, pts: ownPts, since: own.meta && own.meta.firstRun } : null,
+      invest: (state.invest || []).find(r => r.key === key) || null,
+      events: { now: ev.active.filter(x => x.items.includes(plain)), soon: ev.upcoming.filter(x => x.items.includes(plain)) },
+      coflUrl: `https://sky.coflnet.com/item/${encodeURIComponent(c.tag)}${c.q}`,
+    };
+  }
+  // Fetch whatever Coflnet data is missing for this item, then return itemInfo.
+  async function loadItem(key, kind, tier) {
+    const isBz = kind === 'bazaar', plain = key.split('|')[0];
+    const c = coflFor({ key, tier: isBz ? '' : tier });
+    const plainLike = isBz || !c.q, now = Date.now();
+    const jobs = [];
+    const v = volumes.get(c.id);
+    if (!v || now - v.at > VOL_TTL || v.v == null) jobs.push((async () => {
+      const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(c.tag)}${c.q}`);
+      const j = r.ok ? await r.json() : null;
+      volumes.set(c.id, { v: j && typeof j.volume === 'number' ? j.volume : 0, med: j && j.median || null, min: j && j.min || null, max: j && j.max || null, at: Date.now() });
+    })());
+    const map = plainLike ? histories : variantHist, hk = plainLike ? plain : c.id;
+    const h = map.get(hk);
+    if (!h || now - h.at > HIST_TTL) jobs.push((async () => {
+      const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(c.tag)}/history/month${c.q}`);
+      const j = r.ok ? await r.json() : [];
+      map.set(hk, { at: Date.now(), days: (Array.isArray(j) ? j : []).map(d => [Date.parse(d.time) || 0, d.avg || 0, d.min || 0, d.volume || 0]).sort((x, y) => x[0] - y[0]) });
+    })());
+    await Promise.allSettled(jobs);
+    return itemInfo(key, kind, tier);
+  }
+
   function emit() { listeners.forEach(f => f(state)); }
 
   window.SkyFlipEngine = {
@@ -704,5 +758,6 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       (async () => { for (;;) { try { await refreshMayor(); await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
     },
     on(f) { listeners.push(f); },
+    itemInfo, loadItem,
   };
 })();

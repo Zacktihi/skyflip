@@ -171,6 +171,26 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .tag-event{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,var(--line))}
 .tag-soon{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
 #irows .flag{white-space:nowrap;display:inline-block;margin:1px 0}
+/* Item tooltips: hover (or tap) any item name. */
+[data-item]{cursor:pointer;text-decoration:underline dotted color-mix(in srgb,currentColor 35%,transparent);text-underline-offset:3px}
+[data-item]:hover{text-decoration-color:currentColor}
+.tip{position:fixed;z-index:50;width:520px;max-width:calc(100vw - 16px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.28);padding:12px 14px;font-size:.8rem;line-height:1.35;pointer-events:none}
+.tip.pinned{pointer-events:auto}
+.tip[hidden]{display:none}
+.tip .th{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.tip .th b{font:700 .95rem var(--f-display)}
+.tip .th .flag{margin-left:auto}
+.tip h4{margin:10px 0 4px;font:600 .66rem var(--f-body);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.tip dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0}
+.tip dt{color:var(--muted)}
+.tip dd{margin:0;text-align:right;font-family:var(--f-num);white-space:nowrap}
+.tip .spark{width:100%;height:30px;margin-top:4px}
+.tip .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
+.tip .cols h4:first-child{margin-top:0}
+@media (max-width:560px){.tip .cols{grid-template-columns:1fr}}
+.tip .note{color:var(--muted);font-size:.74rem;margin-top:6px}
+.tip .ev-now{color:var(--ok)} .tip .ev-soon{color:var(--warn)}
+.tip a{color:var(--info)}
 .pending{color:var(--muted);font-family:var(--f-body);font-style:italic;font-size:.8rem}
 .zero{font:600 .72rem var(--f-body);text-transform:uppercase;letter-spacing:.05em;background:var(--gold-soft);color:var(--gold);border-radius:5px;padding:2px 7px}
 .below{color:var(--muted);font-size:.8rem;margin-left:6px}
@@ -182,6 +202,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 </style>
 </head>
 <body>
+<div class="tip" id="tip" role="tooltip" hidden></div>
 <header class="topbar">
   <div class="topbar-inner">
     <nav class="tabs" aria-label="Views">
@@ -255,6 +276,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <span>Each scan checks the 250 most-listed plain auction house items and the 150 most-traded bazaar items worth over 100k (Stock of Stonks is always included), using their daily price history for the last month from <a href="https://sky.coflnet.com" target="_blank" rel="noopener">Coflnet</a>. The first visit takes about 4 minutes to load them all; after that they are cached for 6 hours.</span>
       <span>An item is shown when <b>today's price is 12–60% below its normal price</b> and its recent sales have dropped too, its price was steady before that, it wasn't already sliding, and it trades at least 10 a day. "Recent" means the current mayor's term so far (at least 2 days), so a drop caused by the mayor is compared with prices from before they took office. Those get a <b>mayor dip</b> tag; they often recover when the term ends.</span>
       <span><b>Events.</b> The lines above the table show SkyBlock events from the last 7 days, happening now, and coming in the next 7 days, worked out from the SkyBlock calendar and the current mayor's perks: Year of the Seal and Year of the Pig (each comes around every 12 SkyBlock years and lasts the whole year; the Pig falls 6 years after the Seal), Spooky Festival, Season of Jerry, New Year, Traveling Zoo, Mining Fiesta, Fishing Festival and Diana's Mythological Ritual. Items an event hands out are always checked. If one is cheap because a running event is adding supply, it gets a <b>green tag</b> with the event's name, and its price is compared with before the event started; these usually recover after the event. If an event that adds more of it starts soon, it gets an <b>orange tag</b> and is never rated Strong, since the price can drop further first.</span>
+      <span><b>Item cards.</b> Hover any item name (in every tab) for a card with its live price, sales over the last 3 days, its last 30 days of prices, ChudHouse's own recorded history, the investment verdict and any events affecting it. Click to pin the card and get a link to the full chart on Coflnet.</span>
       <span><b>Own price history.</b> ChudHouse records the price of every auction house and bazaar item every 30 minutes on GitHub's servers, whether or not the site is open: hourly prices for the last 14 days and a daily summary kept for good, in the <a href="https://github.com/Zacktihi/skyflip/tree/data" target="_blank" rel="noopener">data branch</a>. Once an item has 20 days of its own history it is judged on that instead of Coflnet's (auction items still use Coflnet for how often they sell). Hover the 30-day line to see which source a row uses.</span>
       <span><b>If it recovers</b> is the normal price: the typical daily average for bazaar items, and the typical lowest daily sale for auction items (a cautious BIN price). <b>Profit</b> is that minus tax (bazaar 1.25%; auction listing fee and claim tax) and what you pay now. On the bazaar a buy order is cheaper than the instant-buy price shown, just slower. <b>Strong</b> means a very steady price before the dip, no downward drift and at least 50 trades a day.</span>
       <span>Nothing here is guaranteed. A dip can also be the start of a lasting drop, for example after a game update makes an item easier to get, so check recent SkyBlock news before investing a lot.</span>
@@ -390,7 +412,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=20"></script>
+<script src="engine.js?v=21"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -504,7 +526,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     $('#c-inv').textContent = list.length;
     if (!list.length) { $('#irows').innerHTML = `<tr><td colspan="10" class="empty">${(st.investChecked || 0) < (st.investTotal || 1) ? 'Still loading price histories; investments appear here as they are checked.' : 'No items have dipped below a stable price right now. Prices are checked again every few minutes.'}</td></tr>`; return; }
     $('#irows').innerHTML = list.map(r => `<tr>
-      <td class="name">${icon(r.key)}<span class="r-${esc(r.tier)}">${esc(r.display)}</span>${r.kind === 'bazaar' ? ' <span class="flag">bazaar</span>' : ''}${r.event ? ` <span class="flag tag-event" title="${esc(r.event.name)} is adding extra supply of this item${r.event.over ? '; it just ended' : ' until it ends in ' + until(r.event.end)}. Event dips usually recover once it is over.">${esc(r.event.name)}</span>` : ''}${r.soon ? ` <span class="flag tag-soon" title="${esc(r.soon.name)} starts in ${until(r.soon.start)} and adds more supply, so the price may drop further before it recovers.">${esc(r.soon.name)} in ${until(r.soon.start)}</span>` : ''}${r.sinceMayor && st.mayorTerm ? ` <span class="flag tag-auction" title="The price was normal before ${esc(st.mayorTerm.name)} took office and dropped after. Mayor-driven dips often recover when the term ends.">mayor dip</span>` : ''}</td>
+      <td class="name">${icon(r.key)}<span class="r-${esc(r.tier)}" data-item="${esc(r.key)}" data-kind="${r.kind === 'bazaar' ? 'bazaar' : 'ah'}" data-tier="${esc(r.tier)}">${esc(r.display)}</span>${r.kind === 'bazaar' ? ' <span class="flag">bazaar</span>' : ''}${r.event ? ` <span class="flag tag-event" title="${esc(r.event.name)} is adding extra supply of this item${r.event.over ? '; it just ended' : ' until it ends in ' + until(r.event.end)}. Event dips usually recover once it is over.">${esc(r.event.name)}</span>` : ''}${r.soon ? ` <span class="flag tag-soon" title="${esc(r.soon.name)} starts in ${until(r.soon.start)} and adds more supply, so the price may drop further before it recovers.">${esc(r.soon.name)} in ${until(r.soon.start)}</span>` : ''}${r.sinceMayor && st.mayorTerm ? ` <span class="flag tag-auction" title="The price was normal before ${esc(st.mayorTerm.name)} took office and dropped after. Mayor-driven dips often recover when the term ends.">mayor dip</span>` : ''}</td>
       <td class="num"${r.kind === 'bazaar' ? ` title="Instant-buy price. A buy order at about ${fmt(r.bid)} costs less but takes longer to fill."` : ''}>${fmt(r.low)}</td>
       <td class="num">${fmt(r.target)}</td>
       <td class="num profit">+${fmt(r.profit)}</td>
@@ -598,7 +620,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const fmtVol = v => v === undefined ? '<span class="pending">checking…</span>' : v === null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
   function snipeRow(s, now) {
     return `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
-      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
+      <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}" data-item="${esc(s.key)}" data-kind="ah" data-tier="${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num"${s.type === 'auction' ? ` title="Next bid: about 15% above the current bid${s.bids ? ' (' + s.bids + ' bids so far)' : ' (no bids yet, so the starting bid)'}"` : ''}>${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
       <td class="num">${s.volume === undefined ? '<span class="pending">checking…</span>' : s.avg3d ? fmt(s.avg3d * s.count) : '–'}</td>
@@ -695,7 +717,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     list = list.slice(0, 300);
     if (!list.length) { $('#brows').innerHTML = `<tr><td colspan="9" class="empty">No ${shardsOnly ? 'shards' : 'bazaar items'} match these filters right now. Try a lower minimum margin or volume.</td></tr>`; return; }
     $('#brows').innerHTML = list.map(r => `<tr>
-      <td class="name">${icon(r.id)}${esc(r.name)}</td>
+      <td class="name">${icon(r.id)}<span data-item="${esc(r.id)}" data-kind="bazaar">${esc(r.name)}</span></td>
       <td class="num">${fmtCoins(r.buyAt)}</td>
       <td class="num">${fmtCoins(r.sellAt)}</td>
       <td class="num profit">+${fmtCoins(r.profit)}</td>
@@ -723,7 +745,95 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   $('#bshards').addEventListener('click', e => { shardsOnly = !shardsOnly; e.currentTarget.setAttribute('aria-pressed', shardsOnly); persistB(); renderBazaar(); });
   $('#brows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
   setInterval(bazaarAge, 1000);
+  // ---------- item tooltips ----------
+  // Hover an item name to see everything ChudHouse knows about it; click (or
+  // tap) to pin the card so its link can be used, click elsewhere or Esc to close.
+  const tip = $('#tip');
+  let tipEl = null, tipPinned = false, tipTimer = 0, tipSeq = 0;
+  const pct = x => (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
+  const coins = n => n == null || !isFinite(n) ? '–' : n < 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 1 }) : fmt(n);
+  const row = (k, v) => v == null || v === '' ? '' : `<dt>${k}</dt><dd>${v}</dd>`;
+  const sec = (title, body, extra = '') => body ? `<h4>${title}</h4><dl>${body}</dl>${extra}` : '';
+  function tipHtml(el, info, loading) {
+    const name = el.textContent.trim(), isBz = el.dataset.kind === 'bazaar', L = info.live;
+    const tspark = (vals, base) => spark(vals, base).replace('<svg ', '<svg preserveAspectRatio="none" ');
+    let html = `<div class="th">${icon(info.key)}<b class="${el.className || ''}">${esc(name)}</b><span class="flag">${isBz ? 'bazaar' : 'auction house'}</span></div>`;
+    let left = '', right = '';
+    // Right now
+    if (isBz) left += sec('Right now', L ? row('Instant buy', coins(L.ask)) + row('Instant sell', coins(L.bid)) + row('Spread', L.bid ? pct((L.ask - L.bid) / L.bid) : '–') + row('Trades per day', Math.round(L.daily).toLocaleString()) + row('Buy orders / sell offers', `${L.buyOrders} / ${L.sellOrders}`) : row('Status', 'not on the bazaar right now'));
+    else left += sec('Right now', L ? row('Lowest BIN', coins(L.low)) + row('2nd lowest', coins(L.second)) + row('Listed', L.n.toLocaleString()) : row('Status', 'no BIN listings right now'));
+    // Coflnet sales (last 3 days)
+    const s = info.sales;
+    left += sec('Sales, last 3 days', s && s.v != null ? row('Sold per day', s.v.toLocaleString(undefined, { maximumFractionDigits: 1 })) + row('Typical sale', coins(s.med)) + row('Lowest / highest', s.min || s.max ? `${coins(s.min)} / ${coins(s.max)}` : null) : loading ? row('Loading', '…') : row('Sales', 'no data'));
+    // Coflnet 30 days
+    const d = info.hist && info.hist.days.filter(x => x[1] > 0);
+    if (d && d.length >= 2) {
+      const avgs = d.map(x => x[1]), mean = avgs.reduce((a, b) => a + b, 0) / avgs.length;
+      const vol = d.reduce((a, x) => a + x[3], 0) / d.length;
+      const change = (avgs[avgs.length - 1] - avgs[0]) / avgs[0];
+      right += sec(`Last ${d.length} days (Coflnet)`, row('Average price', coins(mean)) + row('Day low / high', `${coins(Math.min(...avgs))} / ${coins(Math.max(...avgs))}`) + row('Lowest single sale', coins(Math.min(...d.map(x => x[2] || Infinity)))) + row('Change', pct(change)) + row('Sold per day', vol.toLocaleString(undefined, { maximumFractionDigits: 1 })), tspark(avgs, mean));
+    } else if (loading) right += sec('Last 30 days (Coflnet)', row('Loading', '…'));
+    // ChudHouse's own recordings
+    const o = info.own;
+    if (o && o.pts.length) {
+      const last = o.pts[o.pts.length - 1], days = o.pts.length;
+      const body = isBz
+        ? row('Avg buy / sell today', `${coins(last[1])} / ${coins(last[2])}`) + row('Weekly volume', Math.round(last[3]).toLocaleString()) + (days > 1 ? row('Avg buy over recorded days', coins(o.pts.reduce((a, p) => a + p[1], 0) / days)) : '')
+        : row('Typical lowest BIN today', coins(last[1])) + row('Today low / high', `${coins(last[2])} / ${coins(last[3])}`) + row('Typical listings', Math.round(last[4]).toLocaleString()) + (days > 1 ? row('Avg lowest BIN over recorded days', coins(o.pts.reduce((a, p) => a + p[1], 0) / days)) : '');
+      right += sec(`ChudHouse's own history (${days} ${days === 1 ? 'day' : 'days'})`, body, days > 1 ? tspark(o.pts.map(p => p[1]), o.pts.reduce((a, p) => a + p[1], 0) / days) : '');
+    } else right += sec("ChudHouse's own history", row('Recorded', st && st.own && !st.own.missing ? 'not yet for this item' : 'starting soon'));
+    // Investment verdict
+    const v = info.invest;
+    if (v) left += sec('Investment', row('Below normal', `${(v.dip * 100).toFixed(0)}%`) + row('If it recovers', coins(v.target)) + row('Profit after tax', '+' + coins(v.profit)) + row('Confidence', v.confidence) + row('Judged on', v.source === 'ChudHouse' ? "ChudHouse's history" : 'Coflnet'));
+    html += `<div class="cols"><div>${left}</div><div>${right}</div></div>`;
+    // Events
+    const ev = info.events;
+    if (ev.now.length || ev.soon.length) html += `<h4>Events</h4>` + ev.now.map(e => `<div class="ev-now">${esc(e.name)}: adding supply now, ends in ${until(e.end)}</div>`).join('') + ev.soon.map(e => `<div class="ev-soon">${esc(e.name)} starts in ${until(e.start)} and will add supply</div>`).join('');
+    html += `<div class="note">${tipPinned ? `<a href="${info.coflUrl}" target="_blank" rel="noopener">Full price chart on Coflnet ↗</a>` : 'Click to pin this card.'}</div>`;
+    return html;
+  }
+  function placeTip(el) {
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth, hgt = tip.offsetHeight, vw = innerWidth, vh = innerHeight;
+    let x = Math.min(Math.max(8, r.left), vw - w - 8);
+    let y = r.bottom + 6;
+    if (y + hgt > vh - 8) y = Math.max(8, r.top - hgt - 6);
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  async function showTip(el) {
+    if (!window.SkyFlipEngine || !SkyFlipEngine.itemInfo) return;
+    tipEl = el;
+    const seq = ++tipSeq, key = el.dataset.item, kind = el.dataset.kind, tier = el.dataset.tier || '';
+    tip.classList.toggle('pinned', tipPinned);
+    tip.innerHTML = tipHtml(el, SkyFlipEngine.itemInfo(key, kind, tier), true);
+    tip.hidden = false; placeTip(el);
+    const info = await SkyFlipEngine.loadItem(key, kind, tier);
+    if (seq !== tipSeq || tip.hidden) return;
+    tip.innerHTML = tipHtml(el, info, false); placeTip(el);
+  }
+  function hideTip() { tip.hidden = true; tipEl = null; tipPinned = false; tipSeq++; }
+  document.addEventListener('mouseover', e => {
+    if (tipPinned) return;
+    const el = e.target.closest('[data-item]');
+    if (el === tipEl) return;
+    clearTimeout(tipTimer);
+    if (el) tipTimer = setTimeout(() => showTip(el), 150);
+    else if (tipEl) tipTimer = setTimeout(hideTip, 120);
+  });
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-item]');
+    if (el) { e.preventDefault(); tipPinned = true; showTip(el); return; }
+    if (tipPinned && !e.target.closest('#tip')) hideTip();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideTip(); });
+  addEventListener('scroll', () => { if (!tip.hidden && tipEl) { if (tipPinned && document.contains(tipEl)) placeTip(tipEl); else hideTip(); } }, true);
+  // Tables re-render every update; keep a pinned card attached to the new row.
+  SkyFlipEngine.on(() => {
+    if (!tipEl || tip.hidden || document.contains(tipEl)) return;
+    const again = [...document.querySelectorAll('[data-item]')].find(x => x.dataset.item === tipEl.dataset.item && x.dataset.kind === tipEl.dataset.kind);
+    if (again) { tipEl = again; placeTip(again); } else if (!tipPinned) hideTip();
+  });
 })();
+
 </script>
 </body>
 </html>
