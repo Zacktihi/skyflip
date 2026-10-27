@@ -269,7 +269,55 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       // Y+1 and serves one SkyBlock year (124 real hours).
       const y = j.mayor && j.mayor.election && j.mayor.election.year;
       if (y) { const start = SB_EPOCH + y * SB_YEAR + 88 * SB_DAY; state.mayorTerm = { name: mayor, start, end: start + SB_YEAR }; }
+      // Perk names of the mayor and minister, to know which perk events run this term.
+      perks = [...((j.mayor && j.mayor.perks) || []).map(p => p.name), j.mayor && j.mayor.minister && j.mayor.minister.perk && j.mayor.minister.perk.name].filter(Boolean);
     } catch {}
+  }
+
+  // ---------- SkyBlock events ----------
+  // Events change supply: Year of the Seal floods the market with Seal items,
+  // Mining Fiesta with Refined Minerals, the Spooky Festival with candy and so on.
+  // An item that dipped because an event is running usually recovers once the
+  // event ends; an item with an event coming up may dip further first.
+  // SkyBlock calendar: 12 months of 31 days, 20 real minutes per day, so a year
+  // is 124 real hours. Months: 0 Early Spring ... 6 Early Autumn, 7 Autumn ...
+  // 11 Late Winter.
+  let perks = [];
+  const sbYearStart = y => SB_EPOCH + (y - 1) * SB_YEAR;
+  const sbAt = (y, m, d) => sbYearStart(y) + (m * 31 + d - 1) * SB_DAY;
+  const inTerm = list => { const t = state.mayorTerm; return t ? list.map(([s, e]) => [Math.max(s, t.start), Math.min(e, t.end)]).filter(([s, e]) => e > s) : []; };
+  const hasPerk = name => perks.some(p => p === name);
+  const SEAL_ITEMS = ['SEAL_RING', 'FROZEN_AMULET', 'SEAL_TALISMAN', 'SEAL_TREAT_BAG', 'FISHY_TREAT', 'BEACH_BALL', 'BOUNCY_BEACH_BALL', 'GIANT_BOUNCY_BEACH_BALL',
+    'FISHING_GENERATOR_12', 'CLAY_GENERATOR_12', 'GENERATOR_UPGRADE_STONE_FISHING_12', 'GENERATOR_UPGRADE_STONE_CLAY_12', 'SEAL_PERSONALITY', 'BEACH_BALL_PERSONALITY',
+    'BEACH_BALL_BARN_SKIN', 'SMALL_SEAL_PLUSHIE', 'MEDIUM_SEAL_PLUSHIE', 'LARGE_SEAL_PLUSHIE', 'GIANT_SEAL_PLUSHIE', 'ENCHANTMENT_TIDAL_1', 'ENCHANTMENT_TIDAL_2', 'ENCHANTMENT_TIDAL_3'];
+  const EVENTS = [
+    // Yearly themes rotate on a 12-year cycle; the first Year of the Seal was
+    // SkyBlock year 402 (February 2025) and the Year of the Pig falls 6 years apart.
+    { name: 'Year of the Seal', items: SEAL_ITEMS, occ: y => y % 12 === 6 ? [[sbYearStart(y), sbYearStart(y + 1)]] : [] },
+    { name: 'Year of the Pig', items: ['SHINY_ORB', 'SHINY_PRISM', 'SHINY_ROD', 'SHINY_RELIC', 'SHINY_SHARD', 'PIG_GENERATOR_12'], occ: y => y % 12 === 0 ? [[sbYearStart(y), sbYearStart(y + 1)]] : [] },
+    { name: 'Spooky Festival', after: 864e5, items: ['GREEN_CANDY', 'PURPLE_CANDY', 'ECTOPLASM', 'PUMPKIN_GUTS', 'WEREWOLF_SKIN', 'SOUL_FRAGMENT', 'SPOOKY_SHARD', 'CANDY_TALISMAN', 'CANDY_RING', 'CANDY_ARTIFACT', 'CANDY_RELIC', 'BAT_PERSON_HELMET', 'BAT_PERSON_CHESTPLATE', 'BAT_PERSON_LEGGINGS', 'BAT_PERSON_BOOTS', 'BAT_PERSON_TALISMAN', 'BAT_PERSON_RING', 'BAT_PERSON_ARTIFACT'], occ: y => [[sbAt(y, 7, 29), sbAt(y, 8, 1)]] },
+    { name: 'Season of Jerry', items: ['WHITE_GIFT', 'GREEN_GIFT', 'RED_GIFT', 'GOLD_GIFT', 'GLACIAL_FRAGMENT'], occ: y => [[sbAt(y, 11, 1), sbYearStart(y + 1)]] },
+    { name: 'New Year Celebration', items: [], occ: y => [[sbAt(y, 11, 29), sbYearStart(y + 1)]] },
+    { name: 'Traveling Zoo', items: [], occ: y => [[sbAt(y, 3, 1), sbAt(y, 3, 4)], [sbAt(y, 9, 1), sbAt(y, 9, 4)]] },
+    // Mayor and minister perk events only run during this term.
+    { name: 'Mining Fiesta', items: ['REFINED_MINERAL', 'GLOSSY_GEMSTONE'], occ: y => hasPerk('Mining Fiesta') ? inTerm([[sbAt(y, 6, 1), sbAt(y, 7, 1)]]) : [] },
+    { name: 'Fishing Festival', after: 864e5 / 2, items: ['NURSE_SHARK_TOOTH', 'BLUE_SHARK_TOOTH', 'TIGER_SHARK_TOOTH', 'GREAT_WHITE_SHARK_TOOTH', 'SHARK_FIN', 'ENCHANTED_SHARK_FIN', 'SHARK_SCALE_HELMET', 'SHARK_SCALE_CHESTPLATE', 'SHARK_SCALE_LEGGINGS', 'SHARK_SCALE_BOOTS'], occ: y => hasPerk('Fishing Festival') ? inTerm(Array.from({ length: 12 }, (_, m) => [sbAt(y, m, 1), sbAt(y, m, 4)])) : [] },
+    { name: 'Mythological Ritual', items: ['GRIFFIN_FEATHER', 'ENCHANTED_GRIFFIN_FEATHER', 'BRAIDED_GRIFFIN_FEATHER', 'DAEDALUS_STICK', 'CROCHET_TIGER_PLUSHIE', 'DWARF_TURTLE_SHELMET', 'ANTIQUE_REMEDIES', 'MINOS_RELIC', 'ANCIENT_CLAW', 'ENCHANTED_ANCIENT_CLAW'], occ: () => hasPerk('Mythological Ritual') && state.mayorTerm ? [[state.mayorTerm.start, state.mayorTerm.end]] : [] },
+  ];
+  const UPCOMING_WINDOW = 7 * 864e5;
+  function refreshEvents() {
+    const now = Date.now(), y = Math.floor((now - SB_EPOCH) / SB_YEAR) + 1;
+    const active = [], upcoming = [];
+    for (const ev of EVENTS) {
+      const occ = [y - 1, y, y + 1].flatMap(yy => ev.occ(yy)).sort((a, b) => a[0] - b[0]);
+      const cur = occ.find(([s, e]) => s <= now && now < e + (ev.after || 0));
+      if (cur) active.push({ name: ev.name, items: ev.items, start: cur[0], end: cur[1], over: now >= cur[1] });
+      const next = occ.find(([s]) => s > now && s - now <= UPCOMING_WINDOW && (!cur || s > cur[1]));
+      if (next) upcoming.push({ name: ev.name, items: ev.items, start: next[0], end: next[1] });
+    }
+    upcoming.sort((a, b) => a.start - b.start);
+    state.events = { active, upcoming, year: y, at: now };
+    return state.events;
   }
   const isDerpy = () => mayor === 'Derpy';
   const listeners = [];
@@ -489,7 +537,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // Coflnet's limits, and cached in this browser for 6 hours.
   const HIST_KEY = 'chudhouse-history-v2', HIST_TTL = 6 * 3600e3;
   const INV_AH = 250, INV_BZ = 150, INV_MIN_PRICE = 100_000;
-  const WATCHLIST = ['STOCK_OF_STONKS']; // always checked first
+  const WATCHLIST = ['STOCK_OF_STONKS']; // always checked first, along with items of running and upcoming events
   try { localStorage.removeItem('chudhouse-history-v1'); } catch {}
   const histories = new Map(); // item id -> { at, days: [[time, avg, min, volume], ...] oldest first }
   try { for (const [k, v] of Object.entries(JSON.parse(localStorage.getItem(HIST_KEY) || '{}'))) if (Date.now() - v.at < HIST_TTL) histories.set(k, v); } catch {}
@@ -500,7 +548,8 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   function candidates() {
     const ah = (state.market || []).filter(m => m.low >= INV_MIN_PRICE).sort((a, b) => b.listed - a.listed).slice(0, INV_AH).map(m => m.key);
     const bz = (state.bazaar || []).filter(r => r.ask >= INV_MIN_PRICE && bzDaily(r) >= 10).sort((a, b) => b.ask * bzDaily(b) - a.ask * bzDaily(a)).slice(0, INV_BZ).map(r => r.id);
-    const out = [...WATCHLIST];
+    const ev = refreshEvents();
+    const out = [...WATCHLIST, ...new Set([...ev.active, ...ev.upcoming].flatMap(x => x.items))];
     for (let i = 0; i < Math.max(ah.length, bz.length); i++) for (const id of [bz[i], ah[i]]) if (id && !out.includes(id)) out.push(id);
     return out;
   }
@@ -547,7 +596,8 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     // last 2 days, at most 5), so a drop that started when the mayor took office
     // is measured against prices from before the term.
     const termDays = term && now > term.start ? (now - term.start) / 864e5 : 0;
-    const window = Math.min(5, Math.max(2, Math.ceil(termDays)));
+    const termWindow = Math.min(5, Math.max(2, Math.ceil(termDays)));
+    const ev = refreshEvents();
     const rows = [];
     let checked = 0;
     for (const [id, h] of histories) {
@@ -555,6 +605,11 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       if (!m) continue;
       checked++;
       const days = h.days.filter(d => d[3] > 0 && d[1] > 0);
+      // Event running that adds supply of this item, and one coming up soon.
+      const event = ev.active.find(x => x.items.includes(id)), soon = ev.upcoming.find(x => x.items.includes(id));
+      // An item dipping because of a running event is compared with prices from
+      // before the event started (up to 5 days back).
+      const window = event ? Math.min(5, Math.max(termWindow, Math.ceil((now - event.start) / 864e5))) : termWindow;
       if (days.length < 15) continue;
       const cut = now - window * 864e5;
       const recent = days.filter(d => d[0] >= cut), base = days.filter(d => d[0] < cut);
@@ -583,9 +638,12 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       // Did the drop start once the current mayor took office?
       const preTerm = term ? days.filter(d => d[0] < term.start - 864e5).slice(-3) : [];
       const sinceMayor = !!(term && termDays >= 0.5 && preTerm.length && med(preTerm.map(d => d[1])) >= baseAvg * 0.95);
-      const confidence = cv <= 0.15 && trend >= 0.97 && volume >= 50 ? 'strong' : 'moderate';
+      // An event about to add more supply can push the price lower first, so
+      // those are never rated strong.
+      const confidence = !soon && cv <= 0.15 && trend >= 0.97 && volume >= 50 ? 'strong' : 'moderate';
       rows.push({ ...m, target, profit, upside: profit / m.low, dip, recentDip, dipMin, cv, trend, volume, confidence,
-        sinceMayor, spark: days.map(d => d[1]), baseAvg });
+        sinceMayor: sinceMayor && !event, event: event ? { name: event.name, end: event.end, over: event.over } : null,
+        soon: soon ? { name: soon.name, start: soon.start } : null, spark: days.map(d => d[1]), baseAvg });
     }
     rows.sort((a, b) => b.profit - a.profit);
     state.invest = rows;
