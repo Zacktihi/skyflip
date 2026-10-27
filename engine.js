@@ -759,5 +759,6 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     },
     on(f) { listeners.push(f); },
     itemInfo, loadItem,
+    net: p => net(p, isDerpy()),
   };
 })();

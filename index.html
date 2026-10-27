@@ -175,6 +175,10 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .spark-base{stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3;opacity:.7}
 .spark-dot{fill:var(--bad)}
 .dip{color:var(--bad)}
+.ings{font-size:.78rem;color:var(--muted);max-width:340px}
+.ings [data-item]{color:var(--ink)}
+.req-collection{color:var(--info)}
+.req-slayer{color:var(--warn)}
 .evstrip{display:grid;gap:6px;font-size:.84rem;color:var(--muted);padding:2px 2px}
 .evstrip .evrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .evstrip .evlabel{font:600 .7rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;width:84px;flex:none}
@@ -225,6 +229,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <a class="tab" href="#investments" data-view="investments">Investments <span class="count" id="c-inv">–</span></a>
       <a class="tab" href="#snipes" data-view="snipes">Snipes <span class="count" id="c-snipes">–</span></a>
       <a class="tab" href="#bazaar" data-view="bazaar">Bazaar <span class="count" id="c-bazaar">–</span></a>
+      <a class="tab" href="#crafts" data-view="crafts">Crafts <span class="count" id="c-crafts">–</span></a>
     </nav>
     <div class="brand">
       <img class="logo" src="data:image/webp;base64,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" alt="" width="44" height="44">
@@ -432,9 +437,59 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     </div>
   </details>
   </section>
+
+  <section id="v-crafts" class="view" hidden>
+  <div class="controls">
+    <div class="field"><label for="cq">Search talisman</label><input id="cq" type="search" placeholder="e.g. Ring" autocomplete="off"></div>
+    <div class="field"><label>Requirement</label>
+      <div class="chips" role="group" aria-label="Requirement filter">
+        <button class="chip" data-cr="none" aria-pressed="true" title="Anyone can craft these">No requirement</button>
+        <button class="chip" data-cr="collection" aria-pressed="true">Collection</button>
+        <button class="chip" data-cr="slayer" aria-pressed="true">Slayer</button>
+      </div>
+    </div>
+    <div class="field"><label for="cbasis">Buy ingredients with</label>
+      <select id="cbasis">
+        <option value="instant">Instant buy (fast)</option>
+        <option value="order">Buy orders (cheaper, slower)</option>
+      </select>
+    </div>
+    <div class="field"><label for="cmin">Min profit</label><input id="cmin" type="text" inputmode="decimal" value="1" style="width:110px;font-family:var(--f-num)"></div>
+    <div class="field"><label>Show</label>
+      <div class="chips"><button class="chip" id="call" aria-pressed="false" title="Also list crafts that lose money or can't be priced">Unprofitable too</button></div>
+    </div>
+  </div>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr>
+        <th data-c="name">Talisman</th>
+        <th data-c="reqRank" title="What you need before Hypixel lets you craft it. Click to sort no-requirement recipes first">Requirement</th>
+        <th data-c="cost" class="num" title="All ingredients at current prices">Craft cost</th>
+        <th data-c="sell" class="num" title="Cheapest Buy It Now of the talisman right now">Sells for</th>
+        <th data-c="profit" class="num" aria-sort="descending" title="Sell price minus auction listing fee and claim tax, minus craft cost">Profit after tax</th>
+        <th data-c="margin" class="num">Margin</th>
+        <th data-c="listed" class="num" title="How many are listed as BIN right now">Listed</th>
+        <th data-c="sales" class="num" title="Sales per day over the last 3 days, from Coflnet (loads for the top rows)">Sold/day</th>
+        <th>Ingredients</th>
+        <th>In game</th>
+      </tr></thead>
+      <tbody id="crows"><tr><td colspan="10" class="empty">Loading recipes and prices…</td></tr></tbody>
+    </table>
+  </div>
+
+  <details class="notes">
+    <summary>How these numbers work</summary>
+    <div class="legend">
+      <span>All 181 talismans, rings and artifacts that are made at a crafting table, with their recipes and unlock requirements from the <a href="https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO" target="_blank" rel="noopener">NotEnoughUpdates item repo</a>. 98 of them need no collection or slayer level, so anyone can craft them.</span>
+      <span><b>Craft cost</b> adds up every ingredient at live prices: bazaar items at the instant-buy price (or your buy-order price if you switch above), and auction items, like the lower talisman in an upgrade, at their cheapest BIN. <b>Profit</b> is the talisman's cheapest BIN minus the listing fee and claim tax, minus the craft cost.</span>
+      <span>A craft is shown when it makes a profit and every ingredient has a price. Ingredients that can't be bought (soulbound drops, items nobody is selling) make the recipe unpriceable; switch on "Unprofitable too" to see those. Check <b>Sold/day</b> and <b>Listed</b> before crafting a stack: a big profit on a talisman that sells once a day is hard to cash in.</span>
+    </div>
+  </details>
+  </section>
 </div>
 
-<script src="engine.js?v=22"></script>
+<script src="engine.js?v=23"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -580,10 +635,11 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 
   // ---------- views ----------
   function showView() {
-    const v = location.hash === '#snipes' ? 'snipes' : location.hash === '#bazaar' ? 'bazaar' : 'investments';
+    const v = { '#snipes': 'snipes', '#bazaar': 'bazaar', '#crafts': 'crafts' }[location.hash] || 'investments';
     $('#v-investments').hidden = v !== 'investments';
     $('#v-snipes').hidden = v !== 'snipes';
     $('#v-bazaar').hidden = v !== 'bazaar';
+    $('#v-crafts').hidden = v !== 'crafts';
     document.querySelectorAll('.tab').forEach(t => { if (t.dataset.view === v) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   }
   window.addEventListener('hashchange', showView);
@@ -819,6 +875,103 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   $('#bshards').addEventListener('click', e => { shardsOnly = !shardsOnly; e.currentTarget.setAttribute('aria-pressed', shardsOnly); persistB(); renderBazaar(); });
   $('#brows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
   setInterval(bazaarAge, 1000);
+
+  // ---------- crafts (talismans) ----------
+  let recipes = null, cKey = 'profit', cDir = -1, cState = null;
+  const creq = new Set(['none', 'collection', 'slayer', 'other']);
+  let cAll = false;
+  const sales = new Map(); // talisman id -> sold per day (Coflnet), loaded for the top rows
+  const salesQueue = []; let salesBusy = false;
+  try {
+    const s = JSON.parse(localStorage.getItem('chudhouse-crafts') || '{}');
+    if (s.req) { creq.clear(); s.req.forEach(x => creq.add(x)); creq.add('other'); }
+    if (s.basis) $('#cbasis').value = s.basis;
+    if (s.min != null) $('#cmin').value = s.min;
+    cAll = !!s.all;
+  } catch {}
+  document.querySelectorAll('.chip[data-cr]').forEach(b => b.setAttribute('aria-pressed', creq.has(b.dataset.cr)));
+  $('#call').setAttribute('aria-pressed', cAll);
+  const persistC = () => { try { localStorage.setItem('chudhouse-crafts', JSON.stringify({ req: [...creq].filter(x => x !== 'other'), basis: $('#cbasis').value, min: $('#cmin').value, all: cAll })); } catch {} };
+  fetch('accessories.json?v=1').then(r => r.json()).then(j => { recipes = j.recipes; renderCrafts(); }).catch(() => { $('#crows').innerHTML = '<tr><td colspan="10" class="empty">Could not load the recipe list.</td></tr>'; });
+  // Price of one unit of an ingredient: bazaar first, then cheapest BIN.
+  function unitPrice(id, basis) {
+    const bz = cState && cState.bzMap.get(id);
+    if (bz) { const p = basis === 'order' ? (bz.bid ? bz.bid + 0.1 : bz.ask) : (bz.ask || bz.bid); if (p) return { p, src: 'bazaar' }; }
+    const ah = cState && cState.lows && cState.lows.get(id);
+    if (ah) return { p: ah.low, src: 'auction house' };
+    return null;
+  }
+  function renderCrafts() {
+    if (!recipes || !st || !st.lows || !st.bazaar) return;
+    if (!cState || cState.bazaar !== st.bazaar || cState.lowsRef !== st.lows) cState = { bazaar: st.bazaar, lowsRef: st.lows, lows: st.lows, bzMap: new Map(st.bazaar.map(r => [r.id, r])) };
+    const basis = $('#cbasis').value, q = $('#cq').value.trim().toLowerCase(), minP = parseAmt($('#cmin').value) || 0;
+    const net = SkyFlipEngine.net || (p => p);
+    const rows = [];
+    for (const r of recipes) {
+      let cost = 0, missing = [];
+      const parts = Object.entries(r.ing).map(([id, n]) => {
+        const u = unitPrice(id, basis);
+        if (!u) missing.push(id); else cost += u.p * n;
+        return { id, n, u };
+      });
+      const L = cState.lows.get(r.id);
+      const sell = L ? L.low : null;
+      const priced = !missing.length && sell != null;
+      const profit = priced ? Math.round(net(sell * r.out) - cost) : null;
+      const row = { ...r, cost: missing.length ? null : cost, sell, profit, margin: priced && cost ? profit / cost : null, listed: L ? L.n : 0, parts, missing,
+        reqRank: { none: 0, collection: 1, slayer: 2, other: 3 }[r.reqType], sales: sales.has(r.id) ? sales.get(r.id) : -1, display: r.name };
+      if (!creq.has(r.reqType)) continue;
+      if (q && !r.name.toLowerCase().includes(q)) continue;
+      if (!cAll && !(priced && profit >= minP)) continue;
+      rows.push(row);
+    }
+    const val = (x, k) => x[k] == null ? -Infinity : x[k];
+    rows.sort((a, b) => { if (cKey === 'name') return a.name.localeCompare(b.name) * cDir; const x = val(a, cKey), y = val(b, cKey); return (x === y ? (val(b, 'profit') - val(a, 'profit')) : (x - y) * cDir); });
+    $('#c-crafts').textContent = rows.filter(x => x.profit > 0).length;
+    if (!rows.length) { $('#crows').innerHTML = `<tr><td colspan="10" class="empty">No talisman crafts match these filters right now. Try a lower minimum profit, or switch on "Unprofitable too".</td></tr>`; return; }
+    $('#crows').innerHTML = rows.map(x => `<tr>
+      <td class="name">${icon(x.id)}<span class="r-${esc(x.tier)}" data-item="${esc(x.id)}" data-kind="ah" data-tier="${esc(x.tier)}">${esc(x.name)}</span>${x.out > 1 ? ` <span class="flag">x${x.out}</span>` : ''}</td>
+      <td>${x.reqType === 'none' ? '<span class="ref solid">none</span>' : `<span class="req-${x.reqType}">${esc(x.req)}</span>`}</td>
+      <td class="num">${x.cost == null ? '<span title="No price for: ' + esc(x.missing.map(bzName).join(', ')) + '">?</span>' : fmt(x.cost)}</td>
+      <td class="num">${x.sell == null ? '<span title="None listed right now">–</span>' : fmt(x.sell * x.out)}</td>
+      <td class="num ${x.profit > 0 ? 'profit' : 'dip'}">${x.profit == null ? '?' : (x.profit > 0 ? '+' : '') + fmt(Math.abs(x.profit)).replace(/^/, x.profit < 0 ? '−' : '')}</td>
+      <td class="num">${x.margin == null ? '–' : (x.margin * 100).toFixed(0) + '%'}</td>
+      <td class="num">${x.listed || '–'}</td>
+      <td class="num">${sales.has(x.id) ? (sales.get(x.id) >= 10 ? Math.round(sales.get(x.id)) : sales.get(x.id).toFixed(1)) : '<span class="pending">…</span>'}</td>
+      <td class="ings">${x.parts.map(p => `<span title="${p.u ? fmt(p.u.p) + ' each from the ' + p.u.src + ' = ' + fmt(p.u.p * p.n) : 'no price available'}"${p.u ? '' : ' class="dip"'}>${p.n}× <span data-item="${esc(p.id)}" data-kind="${cState.bzMap.has(p.id) ? 'bazaar' : 'ah'}">${esc(bzName(p.id))}</span></span>`).join(', ')}</td>
+      <td><span class="copies"><button class="copy" data-cmd="${esc(x.name)}" data-label="Copy name" title="Copy the talisman name">Copy name</button></span></td>
+    </tr>`).join('');
+    // Load sales speed for the top rows that don't have it yet.
+    for (const x of rows.slice(0, 30)) if (!sales.has(x.id) && !salesQueue.some(y => y.id === x.id)) salesQueue.push(x);
+    pumpSales();
+  }
+  async function pumpSales() {
+    if (salesBusy || !SkyFlipEngine.loadItem) return; salesBusy = true;
+    while (salesQueue.length) {
+      const x = salesQueue.shift();
+      try { const info = await SkyFlipEngine.loadItem(x.id, 'ah', x.tier); sales.set(x.id, info.sales && info.sales.v != null ? info.sales.v : 0); } catch { sales.set(x.id, 0); }
+      if (!salesQueue.length || salesQueue.length % 5 === 0) renderCrafts();
+      await new Promise(r => setTimeout(r, 400));
+    }
+    salesBusy = false;
+  }
+  SkyFlipEngine.on(() => { if (!$('#v-crafts').hidden || !cState) renderCrafts(); });
+  document.querySelectorAll('th[data-c]').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.c;
+    if (cKey === k) cDir *= -1; else { cKey = k; cDir = (k === 'name' || k === 'reqRank') ? 1 : -1; }
+    document.querySelectorAll('th[data-c]').forEach(t => t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', cDir < 0 ? 'descending' : 'ascending');
+    renderCrafts();
+  }));
+  document.querySelectorAll('.chip[data-cr]').forEach(b => b.addEventListener('click', () => {
+    const c = b.dataset.cr; creq.has(c) ? creq.delete(c) : creq.add(c); b.setAttribute('aria-pressed', creq.has(c)); persistC(); renderCrafts();
+  }));
+  $('#call').addEventListener('click', e => { cAll = !cAll; e.currentTarget.setAttribute('aria-pressed', cAll); persistC(); renderCrafts(); });
+  ['#cq', '#cmin'].forEach(s => $(s).addEventListener('input', () => { persistC(); renderCrafts(); }));
+  $('#cbasis').addEventListener('change', () => { persistC(); renderCrafts(); });
+  $('#crows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
+  window.addEventListener('hashchange', () => { if (location.hash === '#crafts') renderCrafts(); });
+
   // ---------- item tooltips ----------
   // Hover an item name to see everything ChudHouse knows about it; click (or
   // tap) to pin the card so its link can be used, click elsewhere or Esc to close.
