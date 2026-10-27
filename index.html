@@ -312,7 +312,10 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 
   <section id="v-bazaar" class="view" hidden>
   <div class="controls">
-    <div class="field"><label for="bq">Search item</label><input id="bq" type="search" placeholder="e.g. Enchanted Diamond" autocomplete="off"></div>
+    <div class="field"><label for="bq">Search item</label><input id="bq" type="search" placeholder="e.g. Gemzie" autocomplete="off"></div>
+    <div class="field"><label>Show</label>
+      <div class="chips"><button class="chip" id="bshards" aria-pressed="true" title="Only list shards; switch off to see every bazaar item">Shards only</button></div>
+    </div>
     <div class="field"><label for="bmax">Max price per item</label><input id="bmax" type="text" inputmode="decimal" placeholder="e.g. 50k" style="width:130px;font-family:var(--f-num)"></div>
     <div class="field"><label for="bvol">Min traded per day</label><input id="bvol" type="text" inputmode="decimal" value="1k" style="width:120px;font-family:var(--f-num)"></div>
     <div class="field"><label for="bmargin">Min margin %</label><input id="bmargin" type="text" inputmode="decimal" value="2" style="width:100px;font-family:var(--f-num)"></div>
@@ -347,6 +350,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
+      <span><b>Shards only</b> (on by default) limits the list to shards. A shard is shown when, after tax, the gap is between your minimum and maximum margin and trades at least your minimum amount per day, so the orders actually fill. Shard order books are thin and jumpy, which is why the 100% max margin matters most here.</span>
       <span>Bazaar flipping: place a <b>buy order</b> just above the highest one, and once it fills, a <b>sell offer</b> just below the lowest one. You earn the gap minus the bazaar tax, which is only charged when you sell.</span>
       <span><b>Profit / item</b> = sell offer price × (1 − tax) − buy order price. <b>Margin</b> is that profit as a share of what you pay.</span>
       <span><b>Traded / day</b> is the slower of the two sides over the last 7 days: how many items people instantly sold into buy orders, and how many they instantly bought from sell offers. Both your orders need that flow to fill.</span>
@@ -612,9 +616,12 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const s = JSON.parse(localStorage.getItem('chudhouse-bazaar') || '{}');
     ['bmax', 'bvol', 'bmargin', 'bmaxm', 'btax'].forEach(k => { if (s[k] != null) $('#' + k).value = s[k]; });
   } catch {}
-  const persistB = () => { try { localStorage.setItem('chudhouse-bazaar', JSON.stringify(Object.fromEntries(['bmax', 'bvol', 'bmargin', 'bmaxm', 'btax'].map(k => [k, $('#' + k).value])))); } catch {} };
+  let shardsOnly = true;
+  try { const s = JSON.parse(localStorage.getItem('chudhouse-bazaar') || '{}'); if (s.shards === false) shardsOnly = false; } catch {}
+  $('#bshards').setAttribute('aria-pressed', shardsOnly);
+  const persistB = () => { try { localStorage.setItem('chudhouse-bazaar', JSON.stringify({ ...Object.fromEntries(['bmax', 'bvol', 'bmargin', 'bmaxm', 'btax'].map(k => [k, $('#' + k).value])), shards: shardsOnly })); } catch {} };
   const prettyId = id => id.replace(/^ENCHANTMENT_/, '').split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
-  const bzName = id => baseNames[id] || (id.startsWith('ENCHANTMENT_') ? prettyId(id) + ' (book)' : prettyId(id));
+  const bzName = id => baseNames[id] || (id.startsWith('SHARD_') ? prettyId(id.slice(6)) + ' Shard' : id.startsWith('ENCHANTMENT_') ? prettyId(id) + ' (book)' : prettyId(id));
   const fmtCoins = n => n == null ? '–' : n < 100000 ? n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : fmt(n);
   function renderBazaar() {
     if (!bState || !bState.bazaar) return;
@@ -626,6 +633,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     const maxMargin = parseFloat($('#bmaxm').value) > 0 ? parseFloat($('#bmaxm').value) / 100 : Infinity;
     let list = [];
     for (const r of bState.bazaar) {
+      if (shardsOnly && !r.id.startsWith('SHARD_')) continue;
       const buyAt = r.bid + 0.1, sellAt = r.ask - 0.1;
       if (sellAt <= buyAt) continue;
       const profit = sellAt * (1 - tax) - buyAt;
@@ -640,7 +648,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     $('#c-bazaar').textContent = list.length;
     list.sort((a, b) => { const x = a[bKey], y = b[bKey]; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * bDir; });
     list = list.slice(0, 300);
-    if (!list.length) { $('#brows').innerHTML = '<tr><td colspan="9" class="empty">No bazaar items match these filters. Try a lower minimum margin or volume.</td></tr>'; return; }
+    if (!list.length) { $('#brows').innerHTML = `<tr><td colspan="9" class="empty">No ${shardsOnly ? 'shards' : 'bazaar items'} match these filters right now. Try a lower minimum margin or volume.</td></tr>`; return; }
     $('#brows').innerHTML = list.map(r => `<tr>
       <td class="name">${icon(r.id)}${esc(r.name)}</td>
       <td class="num">${fmtCoins(r.buyAt)}</td>
@@ -667,6 +675,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   }));
   ['#bq', '#bmax', '#bvol', '#bmargin', '#bmaxm'].forEach(s => $(s).addEventListener('input', () => { persistB(); renderBazaar(); }));
   $('#btax').addEventListener('change', () => { persistB(); renderBazaar(); });
+  $('#bshards').addEventListener('click', e => { shardsOnly = !shardsOnly; e.currentTarget.setAttribute('aria-pressed', shardsOnly); persistB(); renderBazaar(); });
   $('#brows').addEventListener('click', e => { const btn = e.target.closest('.copy'); if (btn) copyClick(btn); });
   setInterval(bazaarAge, 1000);
 })();
