@@ -125,6 +125,22 @@ tbody tr.row:hover{background:color-mix(in srgb,var(--gold-soft) 60%,transparent
 
 .copy{font:600 .78rem var(--f-num);border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;padding:4px 8px;cursor:pointer}
 .copy:hover{border-color:var(--gold);color:var(--gold)}
+/* Quick buy: one click copies /viewauction for the snipe. */
+.qbuy{background:var(--gold);border-color:var(--gold);color:#111;font-weight:700}
+.qbuy:hover{filter:brightness(1.1);color:#111}
+.qbuy.done{background:transparent;color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%,var(--line))}
+tr.copied td{opacity:.55}
+.qbar{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 28px rgba(0,0,0,.25);padding:10px 12px}
+.qbar[hidden]{display:none}
+.qbar .qinfo{min-width:0;font-size:.8rem;line-height:1.3}
+.qbar .qinfo b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.qbar .qinfo span{color:var(--muted);font-family:var(--f-num)}
+.qbar .qbuy{padding:10px 14px;font-size:.9rem;border-radius:10px;white-space:nowrap}
+.qbar kbd{font:600 .7rem var(--f-num);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:6px;opacity:.7}
+.qbar.pulse{animation:qpulse 1s ease-out 3}
+@keyframes qpulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--gold) 70%,transparent)}100%{box-shadow:0 0 0 14px transparent}}
+.qtoast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:45;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 14px;font-size:.84rem;box-shadow:0 8px 20px rgba(0,0,0,.3);max-width:calc(100vw - 32px)}
+.qtoast[hidden]{display:none}
 .copies{display:inline-flex;gap:6px}
 tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 24px}
@@ -285,6 +301,11 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 
   <section id="v-snipes" class="view" hidden>
+  <div class="qbar" id="qbar" hidden>
+    <div class="qinfo"><b id="qname">–</b><span id="qmeta"></span></div>
+    <button class="copy qbuy" id="qbtn" title="Copy /viewauction for the newest snipe, then paste it in Hypixel chat">⚡ Quick buy<kbd>Q</kbd></button>
+  </div>
+  <div class="qtoast" id="qtoast" role="status" hidden></div>
   <div class="controls">
     <div class="field"><label for="sq">Search item</label><input id="sq" type="search" placeholder="e.g. Hyperion" autocomplete="off"></div>
     <div class="field"><label for="sbudget">Max buy price</label><input id="sbudget" type="text" inputmode="decimal" placeholder="e.g. 50m"></div>
@@ -348,6 +369,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   <details class="notes">
     <summary>How these numbers work</summary>
     <div class="legend">
+    <span><b>Quick buy</b> copies <code>/viewauction</code> for that snipe in one click. In Minecraft press T, Ctrl+V and Enter, and the auction opens to buy. The floating button bottom-right always points at the newest snipe you haven't copied yet, and <b>Q</b> does the same from the keyboard. Copied snipes are greyed out. Nothing is bought automatically: Hypixel bans auto-buyers.</span>
     <span>Only snipes that make <b>more than 250k profit after tax</b> are shown. With both buttons on, BIN snipes are listed first and ending auctions in their own table underneath.</span>
     <span><b>Two kinds of snipe.</b> <b>BIN</b>: a Buy It Now listing at a third of the market price or less. <b>Ending auctions</b> (tagged <i>auction</i>): a bid auction ending within 5 minutes whose next bid (about 15% above the current one) is two-thirds of the market price or less. Other players can still outbid you, and Hypixel's data is up to a minute old, so check the current bid in game.</span>
     <span>The scan reads auction pages from both ends inward and shows snipes from the first pages as soon as they arrive. A page that takes more than 5 seconds is skipped for that update so the rest isn't held up.</span>
@@ -412,7 +434,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=21"></script>
+<script src="engine.js?v=22"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -595,6 +617,48 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const endsIn = t => { const s = Math.round((t - Date.now()) / 1000); return s <= 0 ? 'ended' : 'ends ' + (s >= 60 ? Math.floor(s / 60) + 'm ' : '') + (s % 60) + 's'; };
   const ago = t => { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s / 60) + 'm ago' : Math.floor(s / 3600) + 'h ago'; };
 
+  // ---------- quick buy ----------
+  // One click (or Q) copies "/viewauction <id>" for a snipe. In Minecraft: T,
+  // Ctrl+V, Enter opens the auction to buy it. Nothing is bought automatically;
+  // Hypixel bans auto-buyers. Copied snipes are greyed out so you don't repeat one.
+  const bought = new Set();
+  try { JSON.parse(sessionStorage.getItem('chudhouse-bought') || '[]').forEach(u => bought.add(u)); } catch {}
+  let qTarget = null, toastTimer = 0, qLastUuid = null;
+  function toast(msg) {
+    const t = $('#qtoast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+  }
+  function quickBuy(uuid) {
+    const s = (st && st.snipes || []).find(x => x.uuid === uuid);
+    const cmd = '/viewauction ' + uuid;
+    const done = () => {
+      bought.add(uuid);
+      try { sessionStorage.setItem('chudhouse-bought', JSON.stringify([...bought].slice(-200))); } catch {}
+      toast(`Copied${s ? ' ' + s.name + ' (+' + fmt(s.profit) + ')' : ''}. In Minecraft: T, Ctrl+V, Enter`);
+      renderSnipes();
+    };
+    navigator.clipboard.writeText(cmd).then(done).catch(() => {
+      // Clipboard blocked (e.g. an embedded preview): fall back to a selectable prompt-free copy.
+      const ta = document.createElement('textarea'); ta.value = cmd; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch { toast(cmd); }
+      ta.remove();
+    });
+  }
+  // The floating button always points at the newest snipe you haven't copied
+  // yet (newest first seen; highest profit breaks ties).
+  function updateQuickBar(list) {
+    const pick = list.filter(s => !bought.has(s.uuid))
+      .sort((a, b) => (fresh.get(b.uuid) || 0) - (fresh.get(a.uuid) || 0) || b.start - a.start || b.profit - a.profit)[0] || null;
+    qTarget = pick;
+    const bar = $('#qbar');
+    bar.hidden = !pick;
+    if (!pick) return;
+    $('#qname').textContent = pick.name;
+    $('#qmeta').textContent = `${fmt(pick.price)} → +${fmt(pick.profit)} profit${pick.type === 'auction' ? ' · ' + endsIn(pick.end) : ' · listed ' + ago(pick.start)}`;
+    if (qLastUuid && qLastUuid !== pick.uuid && fresh.get(pick.uuid)) { bar.classList.remove('pulse'); void bar.offsetWidth; bar.classList.add('pulse'); }
+    qLastUuid = pick.uuid;
+  }
   function trackSnipes() {
     const now = Date.now(), ids = new Set(st.snipes.map(s => s.uuid));
     let newOnes = 0;
@@ -619,7 +683,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const checking = () => st.snipes.filter(s => s.volume === undefined).length;
   const fmtVol = v => v === undefined ? '<span class="pending">checking…</span>' : v === null ? '?' : v >= 100 ? Math.round(v).toLocaleString() : v >= 10 ? Math.round(v).toString() : v.toFixed(1);
   function snipeRow(s, now) {
-    return `<tr class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
+    return `<tr data-uuid="${s.uuid}" class="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'fresh' : ''}${bought.has(s.uuid) ? ' copied' : ''}" title="${fresh.get(s.uuid) && now - fresh.get(s.uuid) < 70e3 ? 'New since the last refresh' : ''}">
       <td class="name">${icon(s.key)}<span class="r-${esc(s.tier)}" data-item="${esc(s.key)}" data-kind="ah" data-tier="${esc(s.tier)}">${esc(s.name)}</span>${s.count > 1 ? ` <span class="flag">x${s.count}</span>` : ''}<span class="flags">${s.flags.map(x => `<span class="flag">${esc(x)}</span>`).join('')}</span></td>
       <td class="num"${s.type === 'auction' ? ` title="Next bid: about 15% above the current bid${s.bids ? ' (' + s.bids + ' bids so far)' : ' (no bids yet, so the starting bid)'}"` : ''}>${fmt(s.price)}</td>
       <td class="num" title="Listings from other sellers: ${s.refs.map(r => fmt(r * s.count)).join(', ')}${s.histMedian ? ' · sales seen here ' + fmt(s.histMedian * s.count) : ''}${s.avg3d ? ' · 3-day median ' + fmt(s.avg3d * s.count) : ''}">${fmt(s.marketTotal)}</td>
@@ -629,7 +693,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <td class="num">${fmtVol(s.volume)}</td>
       ${s.type === 'auction' ? `<td class="num ends" data-end="${s.end}">${endsIn(s.end)}</td>` : `<td class="num" data-age="${s.start}">${ago(s.start)}</td>`}
       <td><span class="ref ${s.reference}" title="${{ solid: 'Recent sales or three close listings back up the market price', likely: 'Two other sellers list within 30% of each other', check: 'Market price rests on one listing or listings that disagree; check in game' }[s.reference]}">${s.reference}</span></td>
-      <td>${copyButtons(s.uuid, s.name, s.key)}</td>
+      <td><span class="copies"><button class="copy qbuy${bought.has(s.uuid) ? ' done' : ''}" data-buy="${s.uuid}" title="Copy /viewauction ${s.uuid}, then paste it in Hypixel chat">${bought.has(s.uuid) ? 'Copied ✓' : '⚡ Quick buy'}</button><button class="copy" data-cmd="${esc(copyName(s.name, s.key))}" data-label="Copy name" title="Copy the item name for the auction house search">Copy name</button></span></td>
     </tr>`;
   }
   function renderSnipes() {
@@ -650,6 +714,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       $(count).textContent = rows.length;
       $(tbody).innerHTML = rows.length ? rows.map(s => snipeRow(s, now)).join('') : `<tr><td colspan="10" class="empty">${empty}</td></tr>`;
     }
+    updateQuickBar(list);
   }
   SkyFlipEngine.on(s => { if (s.snipes) { trackSnipes(); renderSnipes(); } });
   document.querySelectorAll('th[data-s]').forEach(th => th.addEventListener('click', () => {
@@ -670,8 +735,17 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   ['#sq', '#sbudget', '#smin'].forEach(s => $(s).addEventListener('input', () => { persistS(); renderSnipes(); }));
   $('#beep').addEventListener('change', () => { persistS(); if ($('#beep').checked) beep(); });
   document.querySelectorAll('.snipe-rows').forEach(tb => tb.addEventListener('click', e => {
+    const q = e.target.closest('[data-buy]'); if (q) { quickBuy(q.dataset.buy); return; }
     const btn = e.target.closest('.copy'); if (btn) copyClick(btn);
   }));
+  $('#qbtn').addEventListener('click', () => { if (qTarget) quickBuy(qTarget.uuid); });
+  // Q copies the newest snipe from anywhere on the Snipes tab (not while typing).
+  document.addEventListener('keydown', e => {
+    if ((e.key !== 'q' && e.key !== 'Q') || e.ctrlKey || e.metaKey || e.altKey || $('#v-snipes').hidden) return;
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+    e.preventDefault();
+    if (qTarget) quickBuy(qTarget.uuid); else toast('No snipe to buy right now');
+  });
   setInterval(() => {
     document.querySelectorAll('[data-age]').forEach(td => td.textContent = ago(+td.dataset.age));
     document.querySelectorAll('[data-end]').forEach(td => td.textContent = endsIn(+td.dataset.end));
