@@ -202,7 +202,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   // rebuild, poll page 0 every second until it changes. Then fetch every page at once,
   // and while those load, show snipes from page 0 straight away (it holds the newest
   // listings), compared against the previous full scan.
-  let lastUpdated = 0, raw = [];
+  let lastUpdated = 0, raw = [], lastEnded = 0, lastCycleAt = 0, totalPages = 1;
   // Derpy quadruples the claim tax, so read the current mayor from Hypixel every 10 minutes.
   let mayor = null, mayorAt = 0;
   async function refreshMayor() {
@@ -214,37 +214,46 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
   const state = { status: 'starting', error: null };
 
   async function cycle() {
-    let first;
+    // Wait for Hypixel's next rebuild. The ended-auctions feed is tiny and is
+    // rebuilt together with the auction pages, so it's the cheapest signal.
+    // Page 0 alone can't be trusted: Hypixel sometimes serves it minutes stale.
+    let ended;
     for (;;) {
       try {
-        first = await getJSON(`${API}/auctions?page=0`);
+        ended = await getJSON(`${API}/auctions_ended`);
         state.error = null;
-        if (first.lastUpdated !== lastUpdated) break;
+        if (ended.lastUpdated !== lastEnded) break;
+        if (Date.now() - lastCycleAt > 75_000) break; // safety net if the feed itself stalls
       } catch (e) { state.error = e.message; emit(); }
       await sleep(1000);
     }
+    lastEnded = ended.lastUpdated;
+    lastCycleAt = Date.now();
     const t0 = performance.now();
-    const pageReqs = [];
-    for (let p = 1; p < first.totalPages; p++) pageReqs.push(getJSON(`${API}/auctions?page=${p}`).catch(() => null));
-    const endedReq = getJSON(`${API}/auctions_ended`).catch(() => ({ auctions: [] }));
+    if (!raw.length) { state.status = 'fetching'; emit(); }
 
-    // Fast path: snipes from page 0 before the rest arrives.
-    if (raw.length) {
-      const fresh = first.auctions.filter(a => a.bin && !described.has(a.uuid)).map(a => [a.uuid, a.item_bytes, a.item_name]);
-      for (const [id, d] of await decode(fresh)) described.set(id, d);
-      const onPage0 = new Set(first.auctions.map(a => a.uuid));
-      const quick = computeFlips(first.auctions.concat(raw.filter(a => !onPage0.has(a.uuid))), isDerpy());
-      Object.assign(state, { snipes: quick.snipes, lastUpdated: first.lastUpdated, quickMs: performance.now() - t0 });
-      emit();
-    } else { state.status = 'fetching'; emit(); }
+    // Fetch every page at once. totalPages comes from the last cycle; any page
+    // reporting more pages than expected triggers a follow-up for the extras.
+    const getPage = p => getJSON(`${API}/auctions?page=${p}`).catch(() => null);
+    let pages = await Promise.all(Array.from({ length: totalPages }, (_, p) => getPage(p)));
+    const reported = Math.max(0, ...pages.filter(Boolean).map(p => p.totalPages || 0));
+    if (reported > totalPages) pages = pages.concat(await Promise.all(Array.from({ length: reported - totalPages }, (_, i) => getPage(totalPages + i))));
+    if (reported) totalPages = reported;
+    pages = pages.filter(p => p && p.auctions);
+    if (!pages.length) throw new Error('Hypixel returned no auction pages');
 
-    const [pages, ended] = await Promise.all([Promise.all(pageReqs), endedReq]);
-    const auctions = first.auctions.concat(...pages.filter(p => p && p.lastUpdated === first.lastUpdated).map(p => p.auctions));
+    // Use the newest snapshot. A page stuck on an older snapshot still counts
+    // (its listings are mostly still valid), but duplicates are dropped.
+    const newest = Math.max(...pages.map(p => p.lastUpdated));
+    const stalePages = pages.filter(p => p.lastUpdated !== newest).length;
+    const seen = new Set(), auctions = [];
+    for (const p of pages.sort((a, b) => b.lastUpdated - a.lastUpdated)) {
+      for (const a of p.auctions) if (!seen.has(a.uuid)) { seen.add(a.uuid); auctions.push(a); }
+    }
     const fetchMs = performance.now() - t0;
 
     // Decode only listings we haven't seen before; forget ones that are gone.
-    const live = new Set(auctions.map(a => a.uuid));
-    for (const k of described.keys()) if (!live.has(k)) described.delete(k);
+    for (const k of described.keys()) if (!seen.has(k)) described.delete(k);
     const todo = auctions.filter(a => a.bin && !described.has(a.uuid)).map(a => [a.uuid, a.item_bytes, a.item_name]);
     state.status = described.size ? 'updating' : 'decoding'; emit();
     for (let i = 0; i < todo.length; i += 4000) {
@@ -252,17 +261,17 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     }
     await Promise.all([recordEnded(ended.auctions || []), refreshMayor()]);
 
-    lastUpdated = first.lastUpdated;
+    lastUpdated = newest;
     raw = auctions;
     const res = computeFlips(raw, isDerpy());
     Object.assign(state, {
-      status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins,
+      status: 'live', lastUpdated, auctions: auctions.length, bins: res.bins, stalePages,
       fetchMs, totalMs: performance.now() - t0, flips: res.flips, snipes: res.snipes,
       salesSession: salesThisSession, historyItems: history.size, mayor, derpy: isDerpy(),
     });
     emit();
-    const wait = first.lastUpdated + 57_000 - Date.now();
-    await sleep(Math.max(500, Math.min(wait, 60_000)));
+    // Sleep until just before the next expected rebuild, then poll every second.
+    await sleep(Math.max(500, Math.min(ended.lastUpdated + 57_000 - Date.now(), 60_000)));
   }
 
   function emit() { listeners.forEach(f => f(state)); }
