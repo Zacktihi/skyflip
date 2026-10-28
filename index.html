@@ -47,18 +47,23 @@ a{color:#c8c8c8}
 a:hover{color:#ffffff}
 .stat b{font:600 .85rem var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat span{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);white-space:nowrap}
-@media (max-width:1500px){
-  .topbar-inner{grid-template-columns:1fr auto}
-  .brand{grid-column:1 / -1;grid-row:1;justify-self:center}
-  .leftnav{grid-column:1;grid-row:2}
-  .status{grid-column:2;grid-row:2}
+/* Logo and name always sit on their own row, centred above the tabs. */
+.topbar-inner{grid-template-columns:1fr auto}
+.brand{grid-column:1 / -1;grid-row:1;justify-self:center}
+.leftnav{grid-column:1;grid-row:2}
+.status{grid-column:2;grid-row:2}
+@media (max-width:1180px){
+  .topbar-inner{grid-template-columns:1fr}
+  .topbar-inner .leftnav{grid-column:1;grid-row:2;justify-self:center}
+  .status{grid-column:1;grid-row:3;justify-self:center}
 }
 @media (max-width:760px){
   .topbar{position:static}
   .topbar-inner{grid-template-columns:1fr}
   .brand{justify-self:center}
   .topbar-inner>*{min-width:0}
-  .leftnav{grid-row:2;justify-self:stretch;max-width:100%}
+  .topbar-inner .leftnav{grid-row:2;justify-self:stretch;max-width:100%}
+  .tabs{flex:1 1 0}
   .tabs{min-width:0;overflow-x:auto;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tab{flex:none}
