@@ -10,34 +10,17 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: a trading desk. Status strip on top, filters, then one dense table per view. */
+/* Black theme with grey accents. Rarity and skill colours stay as in-game. */
 :root{
-  --bg:#f3f4f7; --surface:#ffffff; --line:#dfe2ea; --ink:#151922; --muted:#5f6778;
-  --gold:#b87a0c; --gold-soft:#fbf1dc;
-  --ok:#11795a; --ok-soft:#ddf3eb; --info:#2457c5; --info-soft:#e3ebfb;
-  --warn:#a35a00; --bad:#b4232c; --bad-soft:#fbe4e5; --dim-soft:#eceef3;
-  --r-common:#555; --r-uncommon:#1f8a1f; --r-rare:#2b46c9; --r-epic:#7d1d9c; --r-legendary:#b46a00;
-  --r-mythic:#c2289e; --r-divine:#0f8c9e; --r-special:#c22b2b;
+  --bg:#050505; --surface:#111111; --line:#262626; --ink:#ececec; --muted:#9a9a9a;
+  --gold:#f0b545; --gold-soft:#2a2213;
+  --ok:#3fcf9d; --ok-soft:#0f241d; --info:#c2c2c2; --info-soft:#1f1f1f;
+  --warn:#f0a040; --bad:#ff6b73; --bad-soft:#2e1416; --dim-soft:#1a1a1a;
+  --r-common:#d0d0d0; --r-uncommon:#55ff55; --r-rare:#7d86ff; --r-epic:#c95ce6; --r-legendary:#ffaa00;
+  --r-mythic:#ff66e0; --r-divine:#55ffff; --r-special:#ff5555;
   --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-num:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#10131a; --surface:#171b24; --line:#262c39; --ink:#e7eaf1; --muted:#929bb0;
-  --gold:#f0b545; --gold-soft:#2c2414;
-  --ok:#3fcf9d; --ok-soft:#0f2a22; --info:#7ea2ff; --info-soft:#17223d;
-  --warn:#f0a040; --bad:#ff6b73; --bad-soft:#341619; --dim-soft:#1f2430;
-  --r-common:#d0d0d0; --r-uncommon:#55ff55; --r-rare:#7d86ff; --r-epic:#c95ce6; --r-legendary:#ffaa00;
-  --r-mythic:#ff66e0; --r-divine:#55ffff; --r-special:#ff5555;
-  color-scheme:dark;
-}}
-:root[data-theme="dark"]{
-  --bg:#10131a; --surface:#171b24; --line:#262c39; --ink:#e7eaf1; --muted:#929bb0;
-  --gold:#f0b545; --gold-soft:#2c2414;
-  --ok:#3fcf9d; --ok-soft:#0f2a22; --info:#7ea2ff; --info-soft:#17223d;
-  --warn:#f0a040; --bad:#ff6b73; --bad-soft:#341619; --dim-soft:#1f2430;
-  --r-common:#d0d0d0; --r-uncommon:#55ff55; --r-rare:#7d86ff; --r-epic:#c95ce6; --r-legendary:#ffaa00;
-  --r-mythic:#ff66e0; --r-divine:#55ffff; --r-special:#ff5555;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -60,6 +43,8 @@ h1 + .sub{margin-top:3px}
 .status{justify-self:end;display:flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;background:var(--bg);overflow:hidden}
 .stat{padding:6px 12px;display:grid;gap:1px;min-width:0;border-left:1px solid var(--line)}
 .stat:first-child{border-left:0}
+a{color:#c8c8c8}
+a:hover{color:#ffffff}
 .stat b{font:600 .85rem var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
 .stat span{font-size:.62rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);white-space:nowrap}
 @media (max-width:1500px){
@@ -241,7 +226,9 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .pitem{display:flex;align-items:center;gap:2px;padding:5px 0;border-bottom:1px solid var(--line)}
 .pitem small{display:block;font-size:.72rem;color:var(--muted)}
 .pitem.empty span{color:var(--muted)}
-.ptable{width:100%;border-collapse:collapse;font-size:.86rem}
+.ptable{width:100%;min-width:0;border-collapse:collapse;font-size:.86rem;table-layout:auto}
+.ptable td:first-child{white-space:normal}
+.pcard{min-width:0;overflow-x:auto}
 .ptable th{text-align:left;font:600 .68rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
 .ptable td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .ptable .num{text-align:right;font-family:var(--f-num)}
