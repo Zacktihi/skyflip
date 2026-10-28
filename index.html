@@ -84,9 +84,9 @@ h1 + .sub{margin-top:3px}
 .controls{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
 .field{display:grid;gap:4px}
 .field label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-input[type=search],input[type=text]{font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:100%;height:34px}
+input[type=search],input[type=text],input[type=password]{font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px;width:100%;height:34px}
 select{font:inherit;font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:0 8px;height:34px}
-input[type=search]:focus,input[type=text]:focus{border-color:var(--gold);background:var(--surface)}
+input[type=search]:focus,input[type=text]:focus,input[type=password]:focus{border-color:var(--gold);background:var(--surface)}
 #q{width:220px} #budget,#minp{width:120px;font-family:var(--f-num)}
 input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
@@ -160,6 +160,47 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .banner.err{border-color:var(--bad);color:var(--bad)}
 .tabs{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--bg);justify-self:start}
 .tab{font:600 .9rem var(--f-body);color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:7px;display:inline-flex;align-items:center;gap:8px}
+.tabsep{width:1px;align-self:stretch;margin:4px 6px;background:var(--line)}
+/* Profile page */
+.pform{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.pform input[type=password]{width:300px;font-family:var(--f-num)}
+.pform .hint{font-size:.76rem;color:var(--muted);max-width:420px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.pcard h3{margin:0 0 12px;font:700 1rem var(--f-display);display:flex;gap:8px;align-items:baseline}
+.pcard h3 small{font:500 .78rem var(--f-body);color:var(--muted)}
+.pcard .empty{padding:10px 0;color:var(--muted)}
+.pnote{font-size:.88rem;line-height:1.5}
+#pout{display:grid;gap:14px}
+.phead{display:grid;grid-template-columns:auto 1fr;gap:6px 22px;align-items:start}
+.pskin{grid-row:span 2;image-rendering:auto}
+.pwho h2{margin:0;font:700 1.5rem var(--f-display)}
+.pwho code{font-size:.75rem;color:var(--muted)}
+.prank{color:var(--gold)}
+.psel{display:block;margin-top:8px;font-size:.82rem;color:var(--muted)}
+.psel select{margin-left:6px}
+.plinks{display:flex;gap:14px;margin-top:8px;font-size:.82rem}
+.plinks a{color:var(--info)}
+.pstats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.pstat{background:var(--bg);border-radius:10px;padding:8px 12px}
+.pstat span{display:block;font:600 .66rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.pstat b{font:700 1.15rem var(--f-num)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 18px}
+.pskill span{display:block;font-size:.8rem;color:var(--muted)}
+.pskill b{font:700 1.05rem var(--f-num)}
+.pskill b em{font:600 .62rem var(--f-body);font-style:normal;color:var(--gold);text-transform:uppercase;margin-left:4px}
+.pskill small{display:block;font:500 .7rem var(--f-num);color:var(--muted);margin-top:2px}
+.pbar{height:5px;border-radius:3px;background:var(--dim-soft);overflow:hidden;margin-top:4px}
+.pbar i{display:block;height:100%;background:var(--info);border-radius:3px}
+.pbar.max i{background:var(--gold)}
+.pgear{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px}
+.pitem{display:flex;align-items:center;gap:2px;padding:5px 0;border-bottom:1px solid var(--line)}
+.pitem small{display:block;font-size:.72rem;color:var(--muted)}
+.pitem.empty span{color:var(--muted)}
+.ptable{width:100%;border-collapse:collapse;font-size:.86rem}
+.ptable th{text-align:left;font:600 .68rem var(--f-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+.ptable td{padding:6px 8px;border-bottom:1px solid var(--line)}
+.ptable .num{text-align:right;font-family:var(--f-num)}
+@media (max-width:640px){.phead{grid-template-columns:1fr}.pskin{grid-row:auto;margin:0 auto}.pgear{grid-template-columns:1fr}.pform input[type=password]{width:100%}}
 .tab:hover{color:var(--ink)}
 .tab[aria-current="page"]{color:var(--ink);background:var(--surface);box-shadow:0 1px 2px color-mix(in srgb,var(--ink) 12%,transparent)}
 .tab .count{font:600 .72rem var(--f-num);background:var(--dim-soft);color:var(--muted);border-radius:999px;padding:1px 7px}
@@ -232,6 +273,8 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       <a class="tab" href="#snipes" data-view="snipes">Snipes <span class="count" id="c-snipes">–</span></a>
       <a class="tab" href="#bazaar" data-view="bazaar">Bazaar <span class="count" id="c-bazaar">–</span></a>
       <a class="tab" href="#crafts" data-view="crafts">Crafts <span class="count" id="c-crafts">–</span></a>
+      <span class="tabsep" aria-hidden="true"></span>
+      <a class="tab" href="#profile" data-view="profile" title="Your SkyBlock character">Profile</a>
     </nav>
     <div class="brand">
       <img class="logo" src="data:image/webp;base64,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" alt="" width="44" height="44">
@@ -497,9 +540,21 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     </div>
   </details>
   </section>
+
+  <section id="v-profile" class="view" hidden>
+  <form class="controls pform" id="pform" autocomplete="off">
+    <div class="field"><label for="pname">Minecraft name</label><input id="pname" type="search" placeholder="e.g. Technoblade" spellcheck="false"></div>
+    <div class="field"><label for="pkey">Your Hypixel API key</label><input id="pkey" type="password" placeholder="paste your key (optional)" spellcheck="false"></div>
+    <div class="field"><label>&nbsp;</label><button class="chip" type="submit" aria-pressed="true">Show profile</button></div>
+    <div class="field"><label>&nbsp;</label><button class="chip" type="button" id="pforget" aria-pressed="false" title="Remove the key from this browser">Forget key</button></div>
+    <p class="hint">The key is only needed for levels, skills, gear and your live auctions. It is saved in this browser only and sent only to Hypixel; it never goes into the site's code. Get one at <a href="https://developer.hypixel.net" target="_blank" rel="noopener">developer.hypixel.net</a>.</p>
+  </form>
+  <div id="pout"><div class="pcard pnote">Type a Minecraft name and press <b>Show profile</b>. Without a key you get the skin and recent auctions; add your own Hypixel API key to see the full character.</div></div>
+  </section>
 </div>
 
 <script src="engine.js?v=23"></script>
+<script src="profile.js?v=1" defer></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -645,11 +700,12 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 
   // ---------- views ----------
   function showView() {
-    const v = { '#snipes': 'snipes', '#bazaar': 'bazaar', '#crafts': 'crafts' }[location.hash] || 'investments';
+    const v = { '#snipes': 'snipes', '#bazaar': 'bazaar', '#crafts': 'crafts', '#profile': 'profile' }[location.hash] || 'investments';
     $('#v-investments').hidden = v !== 'investments';
     $('#v-snipes').hidden = v !== 'snipes';
     $('#v-bazaar').hidden = v !== 'bazaar';
     $('#v-crafts').hidden = v !== 'crafts';
+    $('#v-profile').hidden = v !== 'profile';
     document.querySelectorAll('.tab').forEach(t => { if (t.dataset.view === v) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
   }
   window.addEventListener('hashchange', showView);
