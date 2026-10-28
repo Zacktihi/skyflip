@@ -748,6 +748,33 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
     return itemInfo(key, kind, tier);
   }
 
+  // Price chart for the item card: Coflnet's last 24 hours or 7 days (hourly
+  // points) or 30 days (daily points), as [time, avg, min, max, volume] oldest
+  // first, plus ChudHouse's own daily recordings for the 30-day view.
+  const CHART_TTL = 10 * 60e3, charts = new Map();
+  const RANGE_PATH = { '24h': 'day', '7d': 'week', '30d': 'month' };
+  async function loadChart(key, kind, tier, range) {
+    const isBz = kind === 'bazaar';
+    const c = coflFor({ key, tier: isBz ? '' : tier });
+    const ck = c.id + '@' + range, hit = charts.get(ck);
+    let pts = hit && Date.now() - hit.at < CHART_TTL ? hit.pts : null;
+    if (!pts) {
+      const r = await fetch(`https://sky.coflnet.com/api/item/price/${encodeURIComponent(c.tag)}/history/${RANGE_PATH[range] || 'week'}${c.q}`);
+      const j = r.ok ? await r.json() : [];
+      // Coflnet's times are UTC without a zone marker.
+      pts = (Array.isArray(j) ? j : []).map(d => [Date.parse(/Z|[+-]\d\d:?\d\d$/.test(d.time) ? d.time : d.time + 'Z') || 0, d.avg || 0, d.min || 0, d.max || 0, d.volume || 0])
+        .filter(p => p[0] && p[1] > 0).sort((a, b) => a[0] - b[0]);
+      charts.set(ck, { at: Date.now(), pts });
+    }
+    let ownPts = null;
+    const S = own.summary, o = S ? (isBz ? S.bz[key] : S.ah[key]) : null;
+    if (range === '30d' && o && o.length >= 2) {
+      const start = Date.parse(S.start) + 12 * 36e5;
+      ownPts = o.map(p => [start + p[0] * 864e5, p[1]]).filter(p => p[1] > 0);
+    }
+    return { range, pts, own: ownPts };
+  }
+
   function emit() { listeners.forEach(f => f(state)); }
 
   window.SkyFlipEngine = {
@@ -758,7 +785,7 @@ onmessage=e=>{if(e.data.sleep){setTimeout(()=>postMessage({job:e.data.job,out:nu
       (async () => { for (;;) { try { await refreshMayor(); await bazaarCycle(); } catch (e) { state.bazaarError = e.message; emit(); } await sleep(20_000); } })();
     },
     on(f) { listeners.push(f); },
-    itemInfo, loadItem,
+    itemInfo, loadItem, loadChart,
     net: p => net(p, isDerpy()),
   };
 })();

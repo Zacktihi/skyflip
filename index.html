@@ -285,6 +285,23 @@ tr.detail td{background:var(--bg);white-space:normal;padding:12px 16px}
 .tip dt{color:var(--muted)}
 .tip dd{margin:0;text-align:right;font-family:var(--f-num);white-space:nowrap}
 .tip .spark{width:100%;height:30px;margin-top:4px}
+.tchart{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.tchart .tch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tchart .tch h4{margin:0}
+.trange{margin-left:auto;display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.trange button{background:none;border:0;color:var(--muted);font:600 .7rem var(--f-num);padding:3px 8px;cursor:pointer}
+.trange button+button{border-left:1px solid var(--line)}
+.trange button.on{background:var(--dim-soft);color:var(--ink)}
+.tcsum{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:.74rem;color:var(--muted);margin:5px 0 2px}
+.tcsum b{font:600 .76rem var(--f-num);color:var(--ink)}
+.tcsum b.up{color:var(--ok)} .tcsum b.down{color:var(--bad)}
+.tcbody{position:relative}
+.tcbody svg{display:block;width:100%;height:auto;overflow:visible}
+.tcbody .tcempty{padding:26px 0;text-align:center;color:var(--muted)}
+.tcread{position:absolute;top:0;pointer-events:none;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 7px;font:500 .7rem var(--f-num);white-space:nowrap;color:var(--ink)}
+.tcread small{color:var(--muted);display:block;font:500 .66rem var(--f-body)}
+.tclegend{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:.7rem;color:var(--muted);margin-top:3px}
+.tclegend i{display:inline-block;width:12px;height:0;border-top:2px solid;vertical-align:3px;margin-right:4px}
 .tip .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}
 .tip .cols h4:first-child{margin-top:0}
 @media (max-width:560px){.tip .cols{grid-template-columns:1fr}}
@@ -591,7 +608,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   </section>
 </div>
 
-<script src="engine.js?v=23"></script>
+<script src="engine.js?v=24"></script>
 <script src="profile.js?v=2" defer></script>
 <script>
 (() => {
@@ -1119,7 +1136,6 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
   const sec = (title, body, extra = '') => body ? `<h4>${title}</h4><dl>${body}</dl>${extra}` : '';
   function tipHtml(el, info, loading) {
     const name = el.textContent.trim(), isBz = el.dataset.kind === 'bazaar', L = info.live;
-    const tspark = (vals, base) => spark(vals, base).replace('<svg ', '<svg preserveAspectRatio="none" ');
     let html = `<div class="th">${icon(info.key)}<b class="${el.className || ''}">${esc(name)}</b><span class="flag">${isBz ? 'bazaar' : 'auction house'}</span></div>`;
     let left = '', right = '';
     // Right now
@@ -1134,7 +1150,7 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       const avgs = d.map(x => x[1]), mean = avgs.reduce((a, b) => a + b, 0) / avgs.length;
       const vol = d.reduce((a, x) => a + x[3], 0) / d.length;
       const change = (avgs[avgs.length - 1] - avgs[0]) / avgs[0];
-      right += sec(`Last ${d.length} days (Coflnet)`, row('Average price', coins(mean)) + row('Day low / high', `${coins(Math.min(...avgs))} / ${coins(Math.max(...avgs))}`) + row('Lowest single sale', coins(Math.min(...d.map(x => x[2] || Infinity)))) + row('Change', pct(change)) + row('Sold per day', vol.toLocaleString(undefined, { maximumFractionDigits: 1 })), tspark(avgs, mean));
+      right += sec(`Last ${d.length} days (Coflnet)`, row('Average price', coins(mean)) + row('Day low / high', `${coins(Math.min(...avgs))} / ${coins(Math.max(...avgs))}`) + row('Lowest single sale', coins(Math.min(...d.map(x => x[2] || Infinity)))) + row('Change', pct(change)) + row('Sold per day', vol.toLocaleString(undefined, { maximumFractionDigits: 1 })));
     } else if (loading) right += sec('Last 30 days (Coflnet)', row('Loading', '…'));
     // ChudHouse's own recordings
     const o = info.own;
@@ -1143,18 +1159,126 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
       const body = isBz
         ? row('Avg buy / sell today', `${coins(last[1])} / ${coins(last[2])}`) + row('Weekly volume', Math.round(last[3]).toLocaleString()) + (days > 1 ? row('Avg buy over recorded days', coins(o.pts.reduce((a, p) => a + p[1], 0) / days)) : '')
         : row('Typical lowest BIN today', coins(last[1])) + row('Today low / high', `${coins(last[2])} / ${coins(last[3])}`) + row('Typical listings', Math.round(last[4]).toLocaleString()) + (days > 1 ? row('Avg lowest BIN over recorded days', coins(o.pts.reduce((a, p) => a + p[1], 0) / days)) : '');
-      right += sec(`ChudHouse's own history (${days} ${days === 1 ? 'day' : 'days'})`, body, days > 1 ? tspark(o.pts.map(p => p[1]), o.pts.reduce((a, p) => a + p[1], 0) / days) : '');
+      right += sec(`ChudHouse's own history (${days} ${days === 1 ? 'day' : 'days'})`, body);
     } else right += sec("ChudHouse's own history", row('Recorded', st && st.own && !st.own.missing ? 'not yet for this item' : 'starting soon'));
     // Investment verdict
     const v = info.invest;
     if (v) left += sec('Investment', row('Below normal', `${(v.dip * 100).toFixed(0)}%`) + row('If it recovers', coins(v.target)) + row('Profit after tax', '+' + coins(v.profit)) + row('Confidence', v.confidence) + row('Judged on', v.source === 'ChudHouse' ? "ChudHouse's history" : 'Coflnet'));
     html += `<div class="cols"><div>${left}</div><div>${right}</div></div>`;
+    html += `<div class="tchart"><div class="tch"><h4>Price chart</h4><span class="trange">${CH_RANGES.map(r => `<button type="button" data-range="${r}" class="${r === chartRange ? 'on' : ''}">${r}</button>`).join('')}</span></div><div class="tcsum"></div><div class="tcbody"><div class="tcempty">Loading chart…</div></div></div>`;
     // Events
     const ev = info.events;
     if (ev.now.length || ev.soon.length) html += `<h4>Events</h4>` + ev.now.map(e => `<div class="ev-now">${esc(e.name)}: adding supply now, ends in ${until(e.end)}</div>`).join('') + ev.soon.map(e => `<div class="ev-soon">${esc(e.name)} starts in ${until(e.start)} and will add supply</div>`).join('');
-    html += `<div class="note">${tipPinned ? `<a href="${info.coflUrl}" target="_blank" rel="noopener">Full price chart on Coflnet ↗</a>` : 'Click to pin this card.'}</div>`;
+    html += `<div class="note">${tipPinned ? `Hover the chart to read a point. <a href="${info.coflUrl}" target="_blank" rel="noopener">More on Coflnet ↗</a>` : 'Click to pin this card, then hover the chart or switch range.'}</div>`;
     return html;
   }
+  // ---------- price chart inside the item card ----------
+  // Coflnet's last 24 hours / 7 days (hourly) or 30 days (daily), with the
+  // cheapest sale, sales volume, ChudHouse's own recordings and today's price.
+  const CH_RANGES = ['24h', '7d', '30d'];
+  let chartRange = '7d';
+  try { const r = localStorage.getItem('chudhouse-chart-range'); if (CH_RANGES.includes(r)) chartRange = r; } catch {}
+  const chartCache = new Map(); // key|kind|tier@range -> data
+  let chartNow = null, tipInfo = null;
+  const CW = 490, CH = 160, PL = 52, PR = 8, PT = 10, PB = 16, VOLH = 18;
+  const pad2 = n => String(n).padStart(2, '0');
+  const tLabel = (t, range) => { const d = new Date(t); return range === '24h' ? `${pad2(d.getHours())}:00` : `${d.getDate()}/${d.getMonth() + 1}`; };
+  const tFull = (t, range) => { const d = new Date(t); return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) + (range === '30d' ? '' : ' ' + pad2(d.getHours()) + ':00'); };
+  function chartSvg(data, live) {
+    const P = data.pts, O = data.own || [];
+    if (P.length < 2 && O.length < 2) return null;
+    const ts = P.map(p => p[0]).concat(O.map(p => p[0]));
+    const t0 = Math.min(...ts), t1 = Math.max(...ts);
+    const avgs = P.map(p => p[1]).sort((a, b) => a - b), mid = avgs.length ? avgs[avgs.length >> 1] : O[0][1];
+    // Lowball sales would flatten the chart, so the cheapest-sale line stops at half the median.
+    const floor = mid * 0.5, mn = p => Math.max(p[2] || p[1], floor);
+    const vals = P.flatMap(p => [p[1], mn(p)]).concat(O.map(p => p[1]));
+    if (live) vals.push(live);
+    let lo = Math.min(...vals), hi = Math.max(...vals);
+    if (hi === lo) { hi *= 1.05; lo *= 0.95; }
+    const padv = (hi - lo) * 0.08; lo = Math.max(0, lo - padv); hi += padv;
+    const volTop = CH - PB - VOLH, plotB = volTop - 6;
+    const X = t => PL + (t - t0) / ((t1 - t0) || 1) * (CW - PL - PR);
+    const Y = v => PT + (1 - (Math.min(Math.max(v, lo), hi) - lo) / (hi - lo)) * (plotB - PT);
+    const line = (arr, f) => arr.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(f(p)).toFixed(1)}`).join('');
+    const txt = (x, y, s, anchor, fill = 'var(--muted)') => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="10" fill="${fill}" font-family="JetBrains Mono,monospace">${s}</text>`;
+    let g = '';
+    for (let i = 0; i <= 3; i++) { const v = lo + (hi - lo) * i / 3, y = Y(v); g += `<line x1="${PL}" x2="${CW - PR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--line)"/>` + txt(PL - 6, y + 3, coins(v), 'end'); }
+    for (let i = 0; i < 5; i++) { const t = t0 + (t1 - t0) * i / 4; g += txt(X(t), CH - 3, tLabel(t, data.range), i === 0 ? 'start' : i === 4 ? 'end' : 'middle'); }
+    if (P.length) {
+      const vmax = Math.max(...P.map(p => p[4])) || 1, bw = Math.max(1, (CW - PL - PR) / P.length - 1);
+      g += P.map(p => { const h = p[4] / vmax * VOLH; return h > 0 ? `<rect x="${(X(p[0]) - bw / 2).toFixed(1)}" y="${(volTop + VOLH - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="var(--muted)" opacity=".35"/>` : ''; }).join('');
+    }
+    if (P.length >= 2) {
+      const band = line(P, p => p[1]) + P.slice().reverse().map(p => `L${X(p[0]).toFixed(1)},${Y(mn(p)).toFixed(1)}`).join('') + 'Z';
+      g += `<path d="${band}" fill="var(--gold)" opacity=".1"/>`;
+      g += `<path d="${line(P, mn)}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>`;
+      g += `<path d="${line(P, p => p[1])}" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round"/>`;
+    }
+    if (O.length >= 2) g += `<path d="${line(O, p => p[1])}" fill="none" stroke="var(--info)" stroke-width="1.5" stroke-dasharray="5 3"/>`;
+    if (live) { const y = Y(live); g += `<line x1="${PL}" x2="${CW - PR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="var(--ok)" stroke-dasharray="2 3"/>` + txt(CW - PR, y - 4, 'now ' + coins(live), 'end', 'var(--ok)'); }
+    g += `<line class="tccross" x1="0" x2="0" y1="${PT}" y2="${volTop + VOLH}" stroke="var(--ink)" opacity="0"/><circle class="tcdot" r="3.5" fill="var(--gold)" opacity="0"/>`;
+    chartNow = { data, X, Y };
+    return `<svg viewBox="0 0 ${CW} ${CH}" role="img" aria-label="Price over the last ${data.range}">${g}</svg>`;
+  }
+  function drawChart(data, live) {
+    const body = tip.querySelector('.tcbody'), sum = tip.querySelector('.tcsum');
+    if (!body) return;
+    tip.querySelectorAll('.trange button').forEach(b => b.classList.toggle('on', b.dataset.range === data.range));
+    const svg = chartSvg(data, live);
+    if (!svg) { body.innerHTML = `<div class="tcempty">No sales recorded in the last ${data.range}.</div>`; sum.innerHTML = ''; chartNow = null; return; }
+    const P = data.pts;
+    sum.innerHTML = P.length >= 2 ? (() => {
+      const ch = (P[P.length - 1][1] - P[0][1]) / P[0][1], vol = P.reduce((a, p) => a + p[4], 0);
+      return `<span>Change <b class="${ch >= 0 ? 'up' : 'down'}">${pct(ch)}</b></span><span>Low <b>${coins(Math.min(...P.map(p => p[1])))}</b></span><span>High <b>${coins(Math.max(...P.map(p => p[1])))}</b></span><span>Sold <b>${Math.round(vol).toLocaleString()}</b></span>`;
+    })() : '';
+    body.innerHTML = svg + `<div class="tcread" hidden></div><div class="tclegend"><span><i style="border-color:var(--gold)"></i>average sale</span><span><i style="border-color:var(--muted);border-top-style:dashed"></i>cheapest sale</span>${data.own && data.own.length >= 2 ? '<span><i style="border-color:var(--info);border-top-style:dashed"></i>ChudHouse recorded</span>' : ''}${live ? '<span><i style="border-color:var(--ok);border-top-style:dotted"></i>price now</span>' : ''}<span>bars: amount sold</span></div>`;
+  }
+  async function fillChart(el, info) {
+    if (!SkyFlipEngine.loadChart || !tip.querySelector('.tcbody')) return;
+    const key = el.dataset.item, kind = el.dataset.kind, tier = el.dataset.tier || '', range = chartRange, seq = tipSeq;
+    const live = info && info.live ? (kind === 'bazaar' ? info.live.ask : info.live.low) : null;
+    const ck = `${key}|${kind}|${tier}@${range}`;
+    let data = chartCache.get(ck);
+    if (!data) {
+      try { data = await SkyFlipEngine.loadChart(key, kind, tier, range); chartCache.set(ck, data); setTimeout(() => chartCache.delete(ck), 10 * 60e3); }
+      catch { data = null; }
+      if (seq !== tipSeq || tip.hidden || range !== chartRange) return;
+    }
+    if (data) drawChart(data, live);
+    else { const b = tip.querySelector('.tcbody'); if (b) b.innerHTML = '<div class="tcempty">Coflnet could not be reached.</div>'; }
+  }
+  tip.addEventListener('click', e => {
+    const b = e.target.closest('.trange button');
+    if (!b || !tipEl) return;
+    e.stopPropagation();
+    chartRange = b.dataset.range;
+    try { localStorage.setItem('chudhouse-chart-range', chartRange); } catch {}
+    tip.querySelectorAll('.trange button').forEach(x => x.classList.toggle('on', x === b));
+    const body = tip.querySelector('.tcbody');
+    if (body && !chartCache.has(`${tipEl.dataset.item}|${tipEl.dataset.kind}|${tipEl.dataset.tier || ''}@${chartRange}`)) { body.innerHTML = '<div class="tcempty">Loading chart…</div>'; tip.querySelector('.tcsum').innerHTML = ''; }
+    fillChart(tipEl, tipInfo);
+  });
+  const clearRead = () => { const q = s => tip.querySelector(s); if (q('.tcread')) q('.tcread').hidden = true; if (q('.tccross')) q('.tccross').setAttribute('opacity', 0); if (q('.tcdot')) q('.tcdot').setAttribute('opacity', 0); };
+  tip.addEventListener('mousemove', e => {
+    const svg = e.target.closest('.tcbody svg'), read = tip.querySelector('.tcread');
+    if (!svg || !chartNow || !read) return clearRead();
+    const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * CW;
+    const { data, X, Y } = chartNow;
+    const all = data.pts.length ? data.pts : (data.own || []).map(p => [p[0], p[1], 0, 0, 0]);
+    let best = null, bd = Infinity;
+    for (const p of all) { const d = Math.abs(X(p[0]) - sx); if (d < bd) { bd = d; best = p; } }
+    if (!best) return;
+    const x = X(best[0]), cross = tip.querySelector('.tccross'), dot = tip.querySelector('.tcdot');
+    cross.setAttribute('x1', x); cross.setAttribute('x2', x); cross.setAttribute('opacity', .35);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', Y(best[1])); dot.setAttribute('opacity', 1);
+    const ownP = data.range === '30d' ? (data.own || []).find(p => Math.abs(p[0] - best[0]) < 12 * 36e5) : null;
+    read.innerHTML = `<small>${tFull(best[0], data.range)}</small>avg ${coins(best[1])}${best[2] ? ` · min ${coins(best[2])}` : ''}${best[4] ? ` · ${Math.round(best[4]).toLocaleString()} sold` : ''}${ownP ? `<br>ChudHouse ${coins(ownP[1])}` : ''}`;
+    read.hidden = false;
+    const px = x / CW * r.width, w = read.offsetWidth;
+    read.style.left = Math.min(Math.max(0, px - w / 2), r.width - w) + 'px';
+  });
+  tip.addEventListener('mouseleave', clearRead);
   function placeTip(el) {
     const r = el.getBoundingClientRect(), w = tip.offsetWidth, hgt = tip.offsetHeight, vw = innerWidth, vh = innerHeight;
     let x = Math.min(Math.max(8, r.left), vw - w - 8);
@@ -1167,11 +1291,15 @@ tr.fresh td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
     tipEl = el;
     const seq = ++tipSeq, key = el.dataset.item, kind = el.dataset.kind, tier = el.dataset.tier || '';
     tip.classList.toggle('pinned', tipPinned);
-    tip.innerHTML = tipHtml(el, SkyFlipEngine.itemInfo(key, kind, tier), true);
+    tipInfo = SkyFlipEngine.itemInfo(key, kind, tier);
+    tip.innerHTML = tipHtml(el, tipInfo, true);
     tip.hidden = false; placeTip(el);
+    fillChart(el, tipInfo);
     const info = await SkyFlipEngine.loadItem(key, kind, tier);
     if (seq !== tipSeq || tip.hidden) return;
+    tipInfo = info;
     tip.innerHTML = tipHtml(el, info, false); placeTip(el);
+    fillChart(el, info);
   }
   function hideTip() { tip.hidden = true; tipEl = null; tipPinned = false; tipSeq++; }
   document.addEventListener('mouseover', e => {
