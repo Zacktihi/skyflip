@@ -179,19 +179,27 @@
     let right;
     if (!rows) right = `<div class="pcard"><h3>💰 Cheapest magical power</h3><div class="empty">Waiting for auction house prices…</div></div>`;
     else {
-      const shown = rows.filter(r => !cap || r.price <= cap).slice(0, 40);
+      const present = TIER_ORDER.filter(t => rows.some(r => r.tier === t));
+      const pick = present.filter(t => tierPick.has(t));
+      const shown = rows.filter(r => (!cap || r.price <= cap) && (!pick.length || pick.includes(r.tier))).slice(0, 40);
+      const chips = `<div class="prar" role="group" aria-label="Filter by rarity"><button type="button" data-tier="" class="${pick.length ? '' : 'on'}">All</button>${present.map(t => `<button type="button" data-tier="${t}" class="r-${t}${tierPick.has(t) ? ' on' : ''}">${t.replace('_', ' ').toLowerCase()}</button>`).join('')}</div>`;
       let sumP = 0, sumM = 0; shown.slice(0, 10).forEach(r => { sumP += r.price; sumM += r.gain; });
       right = `<div class="pcard"><h3>💰 Cheapest magical power <small>${state ? 'talismans you don\'t have yet' : 'for an empty bag'}</small></h3>
         <div class="pfind"><label>Max price <input id="tmax" type="text" inputmode="decimal" placeholder="e.g. 5m" value="${esc(($('#tmax') && $('#tmax').value) || savedMax)}"></label>
+        ${chips}
         ${shown.length ? `<span class="psum">Top 10: <b>+${sumM} MP</b> for <b>${fmt(sumP)}</b></span>` : ''}</div>
         ${shown.length ? `<table class="ptable"><thead><tr><th>Talisman</th><th class="num">+MP</th><th class="num">Price</th><th class="num">Per MP</th></tr></thead><tbody>${shown.map(r => `<tr>
           <td>${icon(r.id)}<span class="r-${esc(r.tier)}" data-item="${esc(r.id)}" data-kind="ah" data-tier="${esc(r.tier)}">${esc(r.name)}</span>${r.replaces ? ` <small class="pup">upgrades ${esc(r.replaces.name)}</small>` : ''}</td>
-          <td class="num"><b class="pmp">+${r.gain}</b></td><td class="num">${fmt(r.price)}</td><td class="num">${fmt(r.per)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Nothing under that price right now.</div>'}
+          <td class="num"><b class="pmp">+${r.gain}</b></td><td class="num">${fmt(r.price)}</td><td class="num">${fmt(r.per)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Nothing ${pick.length ? 'of that rarity ' : ''}${cap ? 'under that price ' : ''}right now.</div>`}
         <div class="note">Magical power per rarity: common 3, uncommon 5, rare 8, epic 12, legendary 16, mythic 22. Upgrades only count what they add over the version you own. Prices are the cheapest BIN (or bazaar instant buy) right now; ${state ? 'recombobulating what you already own is not included.' : 'add your key to skip the ones you already own.'}</div></div>`;
     }
     return `<div class="ptwo">${left}${right}</div>`;
   }
   let savedMax = '';
+  // Rarities picked in the cheapest-MP filter (none picked = all), kept in this browser.
+  const TIER_STORE = 'chudhouse-mp-tiers';
+  let tierPick = new Set();
+  try { tierPick = new Set(JSON.parse(localStorage.getItem(TIER_STORE) || '[]')); } catch {}
 
   let current = null;
   async function show(name) {
@@ -326,6 +334,13 @@
     try { $('#pkey').value = localStorage.getItem(KEY_STORE) || ''; } catch {}
     try { $('#pname').value = localStorage.getItem(NAME_STORE) || ''; } catch {}
     if ($('#pname').value) setNavHead($('#pname').value);
+    $('#pout').addEventListener('click', e => {
+      const b = e.target.closest('.prar button'); if (!b) return;
+      const t = b.dataset.tier;
+      if (!t) tierPick.clear(); else if (tierPick.has(t)) tierPick.delete(t); else tierPick.add(t);
+      try { localStorage.setItem(TIER_STORE, JSON.stringify([...tierPick])); } catch {}
+      render();
+    });
     $('#pform').addEventListener('submit', e => { e.preventDefault(); show($('#pname').value); });
     $('#pkey').addEventListener('change', () => { try { const v = $('#pkey').value.trim(); v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); } catch {} });
     $('#pforget').addEventListener('click', () => { $('#pkey').value = ''; try { localStorage.removeItem(KEY_STORE); } catch {} if (current) render(); });
