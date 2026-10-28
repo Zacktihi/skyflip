@@ -141,6 +141,7 @@
   // an owned upgrade), priced at the cheapest BIN or bazaar instant buy, ranked by
   // coins per magical power gained. An upgrade only gains the difference over the
   // accessory it replaces.
+  const NEXT_TIER = { COMMON: 'UNCOMMON', UNCOMMON: 'RARE', RARE: 'EPIC', EPIC: 'LEGENDARY', LEGENDARY: 'MYTHIC', SPECIAL: 'VERY_SPECIAL' };
   function bestValue(state) {
     if (!talData || !market || !market.lows) return null;
     const up = talData.upgrades, owned = state ? state.owned : new Map();
@@ -158,11 +159,32 @@
       if (!price) continue;
       out.push({ id, ...a, gain, price, per: price / gain, replaces, listed: l ? l.n : null });
     }
+    // Recombobulating an accessory you use also lifts it one rarity higher.
+    const rc = market.lows.get('RECOMBOBULATOR_3000');
+    if (state && rc && rc.low) for (const it of state.list) {
+      if (!it.active || it.recomb) continue;
+      const next = NEXT_TIER[it.tier]; if (!next) continue;
+      const gain = ((MP[next] || 0) - (MP[it.tier] || 0)) * (it.id === 'HEGEMONY_ARTIFACT' ? 2 : 1);
+      if (gain <= 0) continue;
+      out.push({ id: 'RECOMBOBULATOR_3000', name: 'Recombobulate ' + it.name, tier: next, gain, price: rc.low, per: rc.low / gain, replaces: it, recombOf: it, listed: rc.n });
+    }
     return out.sort((x, y) => x.per - y.per);
   }
   function talismanCards(state, hasKey) {
     const parse = s => { const m = /^\s*([\d.]+)\s*([kmb]?)\s*$/i.exec(s || ''); return m ? +m[1] * ({ k: 1e3, m: 1e6, b: 1e9 }[m[2].toLowerCase()] || 1) : 0; };
     const cap = parse(($('#tmax') && $('#tmax').value) || savedMax);
+    const rows = bestValue(state);
+    // For each accessory you use: the best-value way to take it a rarity higher
+    // (its next upgrade in the chain, or a recombobulator), marked as a good deal
+    // when it is as cheap per magical power as the top 10 overall.
+    const upFor = new Map();
+    if (rows && state) for (const r of rows) if (r.replaces && !upFor.has(r.replaces.id)) upFor.set(r.replaces.id, r);
+    const goodPer = rows && rows.length ? rows[Math.min(9, rows.length - 1)].per : 0;
+    const upHint = x => {
+      const r = x.active && upFor.get(x.id); if (!r) return '';
+      const what = r.recombOf ? 'recomb' : r.name;
+      return `<small class="pnext${r.per <= goodPer ? ' good' : ''}" title="${esc(r.recombOf ? 'Recombobulate it' : 'Upgrade to ' + r.name)}: +${r.gain} MP for ${fmt(r.price)} (${fmt(r.per)} per MP)${r.per <= goodPer ? ', as cheap per MP as your top 10 picks' : ''}">↑ ${esc(what)} +${r.gain} · ${fmt(r.per)}/MP</small>`;
+    };
     // Viewer
     let left;
     if (!state) left = `<div class="pcard"><h3>🎒 Accessory bag</h3><div class="empty">${hasKey ? 'The inventory API is off for this profile, so the accessory bag can\'t be read.' : 'Add your API key to see the talismans you use.'}</div></div>`;
@@ -172,10 +194,9 @@
       const counts = {}; state.list.filter(x => x.active).forEach(x => counts[x.tier] = (counts[x.tier] || 0) + 1);
       left = `<div class="pcard"><h3>🎒 Accessory bag <small>${state.list.filter(x => x.active).length} active · ${state.mp} magical power${value ? ' · worth ~' + fmt(value) : ''}</small></h3>
         <div class="ptiers">${TIER_ORDER.filter(t => counts[t]).map(t => `<span class="r-${t}">${counts[t]} ${t.replace('_', ' ').toLowerCase()}</span>`).join('')}</div>
-        <div class="ptals">${byTier.map(x => `<div class="ptal${x.active ? '' : ' off'}" title="${esc(x.name)} · ${x.active ? '+' + x.mp + ' MP' : 'not counted: ' + x.why}${itemValue(x) ? ' · lowest BIN ' + fmt(itemValue(x)) : ''}">${icon(x.id)}<span class="r-${esc(x.tier)}">${esc(x.name)}</span><b>${x.active ? x.mp : '–'}</b></div>`).join('')}</div></div>`;
+        <div class="ptals">${byTier.map(x => `<div class="ptal${x.active ? '' : ' off'}" title="${esc(x.name)} · ${x.active ? '+' + x.mp + ' MP' : 'not counted: ' + x.why}${itemValue(x) ? ' · lowest BIN ' + fmt(itemValue(x)) : ''}">${icon(x.id)}<span class="ptn"><span class="r-${esc(x.tier)}">${esc(x.name)}</span>${upHint(x)}</span><b>${x.active ? x.mp : '–'}</b></div>`).join('')}</div>${upFor.size ? `<div class="note">↑ = cheapest way to take that accessory a rarity higher (next upgrade or a recombobulator), with its cost per magical power. <span class="pnext good">Green</span> means it is as good a deal as your top 10.</div>` : ''}</div>`;
     }
     // Best value finder
-    const rows = bestValue(state);
     let right;
     if (!rows) right = `<div class="pcard"><h3>💰 Cheapest magical power</h3><div class="empty">Waiting for auction house prices…</div></div>`;
     else {
@@ -189,9 +210,9 @@
         ${chips}
         ${shown.length ? `<span class="psum">Top 10: <b>+${sumM} MP</b> for <b>${fmt(sumP)}</b></span>` : ''}</div>
         ${shown.length ? `<table class="ptable"><thead><tr><th>Talisman</th><th class="num">+MP</th><th class="num">Price</th><th class="num">Per MP</th></tr></thead><tbody>${shown.map(r => `<tr>
-          <td>${icon(r.id)}<span class="r-${esc(r.tier)}" data-item="${esc(r.id)}" data-kind="ah" data-tier="${esc(r.tier)}">${esc(r.name)}</span>${r.replaces ? ` <small class="pup">upgrades ${esc(r.replaces.name)}</small>` : ''}</td>
+          <td>${icon(r.recombOf ? r.recombOf.id : r.id)}<span class="r-${esc(r.tier)}" data-item="${esc(r.id)}" data-kind="ah" data-tier="${esc(r.recombOf ? '' : r.tier)}">${esc(r.name)}</span>${r.recombOf ? ` <small class="pup">${esc(r.recombOf.tier.replace('_', ' ').toLowerCase())} → ${esc(r.tier.replace('_', ' ').toLowerCase())}</small>` : r.replaces ? ` <small class="pup">upgrades ${esc(r.replaces.name)}</small>` : ''}</td>
           <td class="num"><b class="pmp">+${r.gain}</b></td><td class="num">${fmt(r.price)}</td><td class="num">${fmt(r.per)}</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Nothing ${pick.length ? 'of that rarity ' : ''}${cap ? 'under that price ' : ''}right now.</div>`}
-        <div class="note">Magical power per rarity: common 3, uncommon 5, rare 8, epic 12, legendary 16, mythic 22. Upgrades only count what they add over the version you own. Prices are the cheapest BIN (or bazaar instant buy) right now; ${state ? 'recombobulating what you already own is not included.' : 'add your key to skip the ones you already own.'}</div></div>`;
+        <div class="note">Magical power per rarity: common 3, uncommon 5, rare 8, epic 12, legendary 16, mythic 22. Upgrades only count what they add over the version you own. Prices are the cheapest BIN (or bazaar instant buy) right now; ${state ? 'upgrades of talismans you own (and recombobulating them) are listed too.' : 'add your key to skip the ones you already own and see upgrades of yours.'}</div></div>`;
     }
     return `<div class="ptwo">${left}${right}</div>`;
   }
